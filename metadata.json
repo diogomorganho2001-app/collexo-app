@@ -1,0 +1,31 @@
+{
+  "id": "worldcup2026",
+  "name": "Panini FIFA World Cup 2026",
+  "shortName": "WC 2026",
+  "totalStickers": 1034,
+  "hosts": ["Canada", "Mexico", "USA"],
+  "hostFlags": ["🇨🇦", "🇲🇽", "🇺🇸"],
+  "hostSubtitle": "Canada · Mexico · United States",
+  "dates": "Jun–Jul 2026",
+  "description": "1,034 stickers across 48 nations. Collect the full Panini FIFA World Cup 2026 sticker album.",
+  "stickerFile": "stickers.json",
+  "milestones": [25, 50, 75, 100],
+  "cities": [
+    { "name": "New York/New Jersey", "flag": "🇺🇸", "stadium": "MetLife Stadium", "capacity": "82,500" },
+    { "name": "Los Angeles", "flag": "🇺🇸", "stadium": "SoFi Stadium", "capacity": "70,240" },
+    { "name": "Dallas", "flag": "🇺🇸", "stadium": "AT&T Stadium", "capacity": "80,000" },
+    { "name": "San Francisco", "flag": "🇺🇸", "stadium": "Levi's Stadium", "capacity": "68,500" },
+    { "name": "Seattle", "flag": "🇺🇸", "stadium": "Lumen Field", "capacity": "68,740" },
+    { "name": "Boston", "flag": "🇺🇸", "stadium": "Gillette Stadium", "capacity": "65,878" },
+    { "name": "Miami", "flag": "🇺🇸", "stadium": "Hard Rock Stadium", "capacity": "65,326" },
+    { "name": "Atlanta", "flag": "🇺🇸", "stadium": "Mercedes-Benz Stadium", "capacity": "71,000" },
+    { "name": "Houston", "flag": "🇺🇸", "stadium": "NRG Stadium", "capacity": "72,220" },
+    { "name": "Kansas City", "flag": "🇺🇸", "stadium": "Arrowhead Stadium", "capacity": "76,416" },
+    { "name": "Philadelphia", "flag": "🇺🇸", "stadium": "Lincoln Financial Field", "capacity": "69,796" },
+    { "name": "Vancouver", "flag": "🇨🇦", "stadium": "BC Place", "capacity": "54,500" },
+    { "name": "Toronto", "flag": "🇨🇦", "stadium": "BMO Field", "capacity": "45,736" },
+    { "name": "Guadalajara", "flag": "🇲🇽", "stadium": "Estadio Akron", "capacity": "49,850" },
+    { "name": "Mexico City", "flag": "🇲🇽", "stadium": "Estadio Azteca", "capacity": "87,523" },
+    { "name": "Monterrey", "flag": "🇲🇽", "stadium": "Estadio BBVA", "capacity": "53,500" }
+  ]
+}
