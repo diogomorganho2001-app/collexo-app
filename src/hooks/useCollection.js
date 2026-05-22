@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import { loadUserData, saveUserData } from '../services/collections.js';
-import defaultStickers from '../../data/collections/worldcup2026/stickers.json';
+import defaultStickers from '../../stickers.json';
 
 function buildInitialStickers(saved) {
   return (saved || defaultStickers).map(s => ({
