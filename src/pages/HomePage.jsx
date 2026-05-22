@@ -1,5 +1,5 @@
 import React from 'react';
-import metadata from '../../data/collections/worldcup2026/metadata.json';
+import metadata from '../../metadata.json';
 
 export default function HomePage({ stickers, onTeamClick }) {
   const owned      = stickers.filter(s => s.owned).length;
