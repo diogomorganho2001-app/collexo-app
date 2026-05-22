@@ -6,10 +6,7 @@ import { checkMilestones, launchConfetti } from './utils/milestones.js';
 
 import AuthPage        from './pages/AuthPage.jsx';
 import HomePage        from './pages/HomePage.jsx';
-import CollectionPage  from './pages/CollectionPage.jsx';
-import DuplicatesPage  from './pages/DuplicatesPage.jsx';
-import TradePage       from './pages/TradePage.jsx';
-import StatsPage       from './pages/StatsPage.jsx';
+import WorldCupPage    from './pages/WorldCup.jsx';
 import CompactStats    from './components/CompactStats.jsx';
 import MilestoneToast  from './components/MilestoneToast.jsx';
 
@@ -143,10 +140,10 @@ export default function App() {
     await afterChange(next);
   }, [afterChange]);
 
-  // ── Team click: jump to collection filtered by team ──────────────────────
+  // ── Team click: jump to World Cup collection filtered by team ─────────
   const handleTeamClick = useCallback((team) => {
     setTeamNavTarget(team);
-    setActivePage('collection');
+    setActivePage('worldcup');
   }, []);
 
   // ── Loading / auth guard ─────────────────────────────────────────────────
@@ -155,11 +152,8 @@ export default function App() {
   if (!ready)  return null;
 
   const navItems = [
-    { id: 'home',       label: '🏠 Home'       },
-    { id: 'collection', label: '📋 Collection'  },
-    { id: 'duplicates', label: '🔄 Repeated'    },
-    { id: 'trade',      label: '🤝 Trade'       },
-    { id: 'stats',      label: '📊 Stats'       },
+    { id: 'home',      label: '🏠 Home'       },
+    { id: 'worldcup',  label: '🌍 World Cup'  },
   ];
 
   return (
@@ -191,44 +185,28 @@ export default function App() {
           ))}
         </div>
 
-        {activePage !== 'home' && <CompactStats stickers={stickers} />}
+        {activePage === 'worldcup' && <CompactStats stickers={stickers} />}
       </header>
 
       <div className="container">
-        <div className={activePage === 'home'       ? '' : 'hidden'}>
+        <div className={activePage === 'home' ? '' : 'hidden'}>
           <HomePage
-            stickers={stickers}
-            onTeamClick={handleTeamClick}
+            onEnterWorldCup={() => setActivePage('worldcup')}
           />
         </div>
-        <div className={activePage === 'collection' ? '' : 'hidden'}>
-          <CollectionPage
+        <div className={activePage === 'worldcup' ? '' : 'hidden'}>
+          <WorldCupPage
             stickers={stickers}
+            tradeHistory={tradeHistory}
+            onTeamClick={handleTeamClick}
             onToggleOwned={handleToggleOwned}
             onAddDup={handleAddDup}
             onRemoveDup={handleRemoveDup}
             onBulkOwned={handleBulkOwned}
             onBulkDup={handleBulkDup}
-            initialTeam={teamNavTarget}
-          />
-        </div>
-        <div className={activePage === 'duplicates' ? '' : 'hidden'}>
-          <DuplicatesPage
-            stickers={stickers}
             onRemoveAllDup={handleRemoveAllDup}
-          />
-        </div>
-        <div className={activePage === 'trade'      ? '' : 'hidden'}>
-          <TradePage
-            stickers={stickers}
-            tradeHistory={tradeHistory}
             onTradeAccepted={handleTradeAccepted}
-          />
-        </div>
-        <div className={activePage === 'stats'      ? '' : 'hidden'}>
-          <StatsPage
-            stickers={stickers}
-            onTeamClick={handleTeamClick}
+            initialTeam={teamNavTarget}
           />
         </div>
       </div>
