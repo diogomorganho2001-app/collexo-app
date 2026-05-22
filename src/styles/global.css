@@ -350,6 +350,75 @@ body.light-mode header {
   font-weight: 700;
 }
 
+.worldcup-summary {
+  padding: 16px 18px 0;
+}
+
+.worldcup-progress {
+  margin-top: 18px;
+  padding: 0 0 10px;
+}
+
+.worldcup-progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  text-transform: uppercase;
+  color: var(--text3);
+}
+
+.worldcup-progress-track {
+  width: 100%;
+  height: 12px;
+  background: var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.worldcup-progress-fill {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, var(--gold), rgba(232,184,75,.75));
+  border-radius: 999px;
+  transition: width .45s ease;
+}
+
+@media (max-width: 768px) {
+  .home-hero {
+    padding: 20px 14px 18px;
+    min-height: 220px;
+  }
+
+  .hero-title {
+    font-size: 2rem;
+  }
+
+  .hero-subtitle {
+    font-size: 11px;
+    margin-bottom: 12px;
+  }
+
+  .hero-bg-image {
+    height: 40%;
+  }
+
+  .worldcup-summary .stats {
+    grid-template-columns: 1fr;
+  }
+
+  .worldcup-tabs {
+    padding: 0 14px 12px;
+  }
+
+  .worldcup-tabs button {
+    min-height: 38px;
+    padding: 0 10px;
+  }
+}
+
 /* ── COMPACT STATS BAR ── */
 #compactStats {
   display: flex;

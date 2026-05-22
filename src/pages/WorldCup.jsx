@@ -90,7 +90,18 @@ export default function WorldCupPage({
             <div className="stat-lbl">Total</div>
           </div>
         </div>
+
+        <div className="worldcup-progress">
+          <div className="worldcup-progress-header">
+            <span>Completion</span>
+            <strong>{percent}%</strong>
+          </div>
+          <div className="worldcup-progress-track">
+            <div className="worldcup-progress-fill" style={{ width: percent + '%' }} />
+          </div>
+        </div>
       </div>
+      
       <div className="worldcup-tabs">
         {tabs.map(tab => (
           <button

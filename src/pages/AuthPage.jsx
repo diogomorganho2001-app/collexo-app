@@ -28,7 +28,6 @@ export default function AuthPage() {
     <div id="authPage">
       <div className="auth-inner">
         <div className="auth-logo">
-          <span className="trophy-big">📇</span>
           <h1>Collexo</h1>
           <p>Collect-Connect-Complete</p>
         </div>
