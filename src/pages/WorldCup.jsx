@@ -74,6 +74,7 @@ export default function WorldCupPage({
         {tabs.map(tab => (
           <button
             key={tab.id}
+            id={`${tab.id}Tab`}
             className={activeTab === tab.id ? 'active' : ''}
             onClick={() => setActiveTab(tab.id)}
           >

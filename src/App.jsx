@@ -161,8 +161,8 @@ export default function App() {
       <header>
         <div className="header-top">
           <div className="brand">
-            <h1>🏆 Panini WC 2026</h1>
-            <span>Sticker Collection Tracker</span>
+            <h1>Collexo</h1>
+            <span>Collections Tracker</span>
           </div>
           <div className="header-actions">
             <button className="btn-theme" onClick={() => setLightMode(m => !m)}>

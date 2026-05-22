@@ -28,9 +28,9 @@ export default function AuthPage() {
     <div id="authPage">
       <div className="auth-inner">
         <div className="auth-logo">
-          <span className="trophy-big">🏆</span>
-          <h1>Panini WC 2026</h1>
-          <p>Sticker Album Tracker</p>
+          <span className="trophy-big">📇</span>
+          <h1>Collexo</h1>
+          <p>Collect-Connect-Complete</p>
         </div>
         <div className="auth-box">
           <input
