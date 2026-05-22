@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { onAuthChange } from './src/services/auth.js';
+import { onAuthChange } from '../services/auth.js';
 
 /**
  * Returns { user, loading }
