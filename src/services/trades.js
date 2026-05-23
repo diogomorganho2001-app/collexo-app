@@ -19,20 +19,28 @@ export async function findUserByEmail(email) {
 }
 
 /** Send a trade proposal to another user. */
-export async function sendProposal({ fromEmail, fromUid, toEmail, toUid, giveCode, giveName, giveTeam, wantCode, wantName, wantTeam }) {
+export async function sendProposal({ fromEmail, fromUid, fromUserId, toEmail, toUid, toUserId, giveCode, giveName, giveTeam, wantCode, wantName, wantTeam }) {
   await addDoc(collection(db, 'proposals'), {
-    fromEmail, fromUid,
-    toEmail,   toUid,
-    giveCode,  giveName,  giveTeam,
-    wantCode,  wantName,  wantTeam,
+    fromEmail,
+    fromUid,
+    fromUserId,
+    toEmail,
+    toUid,
+    toUserId,
+    giveCode,
+    giveName,
+    giveTeam,
+    wantCode,
+    wantName,
+    wantTeam,
     status: 'pending',
     createdAt: serverTimestamp(),
   });
 }
 
-/** Fetch all pending proposals addressed to an email. */
-export async function loadIncomingProposals(toEmail) {
-  const q    = query(collection(db, 'proposals'), where('toEmail', '==', toEmail), where('status', '==', 'pending'));
+/** Fetch all pending proposals addressed to the current user ID. */
+export async function loadIncomingProposals(toUserId) {
+  const q    = query(collection(db, 'proposals'), where('toUserId', '==', toUserId), where('status', '==', 'pending'));
   const snap = await getDocs(q);
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
@@ -45,10 +53,10 @@ export async function respondToProposal(propId, action) {
 }
 
 /** Upsert the current user's entry on the public trade board. */
-export async function publishToBoard(email, dups, missing) {
+export async function publishToBoard(email, ownerId, dups, missing) {
   const q    = query(collection(db, 'tradeBoard'), where('email', '==', email));
   const snap = await getDocs(q);
-  const entry = { email, dups, missing, updatedAt: serverTimestamp() };
+  const entry = { email, ownerId, dups, missing, updatedAt: serverTimestamp() };
   if (!snap.empty) {
     await updateDoc(doc(db, 'tradeBoard', snap.docs[0].id), entry);
   } else {
@@ -102,19 +110,19 @@ export async function getUserCollection(email) {
 }
 
 /** Load all trade history (both sent and received proposals). */
-export async function loadAllTradeHistory(email) {
+export async function loadAllTradeHistory(userId) {
   try {
     // Get sent proposals that were accepted or rejected
     const sentQ = query(
       collection(db, 'proposals'),
-      where('fromEmail', '==', email),
+      where('fromUserId', '==', userId),
       where('status', 'in', ['accepted', 'rejected'])
     );
     
     // Get received proposals that were accepted or rejected
     const receivedQ = query(
       collection(db, 'proposals'),
-      where('toEmail', '==', email),
+      where('toUserId', '==', userId),
       where('status', 'in', ['accepted', 'rejected'])
     );
     

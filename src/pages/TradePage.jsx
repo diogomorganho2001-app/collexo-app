@@ -267,6 +267,7 @@ function ProposeTab({ stickers, onTradeAccepted }) {
   // Handle recipient email search
   async function handleRecipientSearch(value) {
     setToEmailSearch(value);
+    setToEmail(value);
     if (value.length < 2) {
       setToEmailResults([]);
     } else {
@@ -283,22 +284,26 @@ function ProposeTab({ stickers, onTradeAccepted }) {
   }
 
   async function handleSend() {
-    if (!toEmail || !giveCode || !wantCode) { alert('Fill all fields'); return; }
+    const targetEmail = toEmail || toEmailSearch;
+    if (!targetEmail || !giveCode || !wantCode) { alert('Fill all fields'); return; }
     const giveSt = stickers.find(s => s.code === giveCode);
     const wantSt = stickers.find(s => s.code === wantCode);
     try {
-      const found = await findUserByEmail(toEmail);
-      if (!found) { alert(`User "${toEmail}" not found.`); return; }
+      const found = await findUserByEmail(targetEmail);
+      if (!found) { alert(`User "${targetEmail}" not found.`); return; }
       await sendProposal({
         fromEmail: auth.currentUser.email,
         fromUid:   auth.currentUser.uid,
-        toEmail,
+        fromUserId: auth.currentUser.uid,
+        toEmail: targetEmail,
         toUid:     found.uid,
+        toUserId:  found.uid,
         giveCode,  giveName: giveSt?.name, giveTeam: giveSt?.team,
         wantCode,  wantName: wantSt?.name, wantTeam: wantSt?.team,
       });
-      alert(`✅ Proposal sent to ${toEmail}!`);
+      alert(`✅ Proposal sent to ${targetEmail}!`);
       setToEmail('');
+      setToEmailSearch('');
       setGiveCode('');
       setWantCode('');
     } catch (err) {
@@ -426,7 +431,7 @@ function IncomingProposals({ stickers, onTradeAccepted }) {
   async function load() {
     if (!auth.currentUser) return;
     try {
-      const ps = await loadIncomingProposals(auth.currentUser.email);
+      const ps = await loadIncomingProposals(auth.currentUser.uid);
       setProposals(ps);
     } catch {
       setProposals([]);
@@ -507,6 +512,7 @@ function BoardTab({ stickers }) {
     try {
       await publishToBoard(
         auth.currentUser.email,
+        auth.currentUser.uid,
         dups.map(s => ({ code: s.code, name: s.name, team: s.team, qty: s.dupCount })),
         missing.map(s => ({ code: s.code, name: s.name })),
       );
@@ -584,7 +590,7 @@ function HistoryTab({ tradeHistory }) {
   async function loadHistory() {
     if (!auth.currentUser) return;
     try {
-      const trades = await loadAllTradeHistory(auth.currentUser.email);
+      const trades = await loadAllTradeHistory(auth.currentUser.uid);
       setAllTrades(trades);
     } catch (err) {
       console.error('Error loading history:', err);
