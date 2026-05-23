@@ -19,7 +19,7 @@ export async function findUserByEmail(email) {
 }
 
 /** Send a trade proposal to another user. */
-export async function sendProposal({ fromEmail, fromUid, fromUserId, toEmail, toUid, toUserId, giveCode, giveName, giveTeam, wantCode, wantName, wantTeam }) {
+export async function sendProposal({ fromEmail, fromUid, fromUserId, toEmail, toUid, toUserId, giveCode, giveName, giveTeam, wantCode, wantName, wantTeam, message, requestType, attachedWantList }) {
   await addDoc(collection(db, 'proposals'), {
     fromEmail,
     fromUid,
@@ -27,12 +27,15 @@ export async function sendProposal({ fromEmail, fromUid, fromUserId, toEmail, to
     toEmail,
     toUid,
     toUserId,
-    giveCode,
-    giveName,
-    giveTeam,
+    giveCode: giveCode || '',
+    giveName: giveName || '',
+    giveTeam: giveTeam || '',
     wantCode,
     wantName,
     wantTeam,
+    message: message || '',
+    requestType: requestType || 'proposal',
+    attachedWantList: attachedWantList || [],
     status: 'pending',
     createdAt: serverTimestamp(),
   });

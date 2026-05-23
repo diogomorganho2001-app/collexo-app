@@ -8,6 +8,7 @@ function buildInitialStickers(saved) {
     owned:     s.owned     || false,
     dupCount:  s.dupCount  !== undefined ? s.dupCount : (s.duplicate ? 1 : 0),
     duplicate: s.dupCount  > 0 || s.duplicate || false,
+    wanted:   s.wanted   || false,
   }));
 }
 

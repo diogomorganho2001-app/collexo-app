@@ -23,6 +23,10 @@ function FindTab({ stickers }) {
   const [canGet,        setCanGet]        = useState([]);
   const [theirStickers, setTheirStickers] = useState(null);
   const [showingStickers, setShowingStickers] = useState(false);
+  const [selectedCard,  setSelectedCard]  = useState(null);
+  const [offerCode,     setOfferCode]     = useState('');
+  const [requestStatus, setRequestStatus] = useState(null);
+  const [interestMessage, setInterestMessage] = useState('Hey I want this card, can you check my list and see if there is any of your interest?');
 
   // Handle email search with debounce
   async function handleEmailSearch(value) {
@@ -40,7 +44,17 @@ function FindTab({ stickers }) {
     setEmail(selectedEmail);
     setSearchResults([]);
     setShowingStickers(false);
+    setSelectedCard(null);
     await checkTrade(selectedEmail);
+  }
+
+  async function selectCard(card) {
+    setSelectedCard(card);
+    setOfferCode('');
+    setRequestStatus(null);
+    if (!theirStickers || theirStickers.email !== email) {
+      await viewTheirStickers();
+    }
   }
 
   async function checkTrade(emailToCheck) {
@@ -79,6 +93,74 @@ function FindTab({ stickers }) {
       setStatus({ type: 'error', msg: `❌ Error: ${err.message}` });
     }
   }
+
+  async function sendOfferToFriend() {
+    if (!selectedCard) return;
+    if (!offerCode) { setRequestStatus({ type: 'error', msg: 'Pick a card to offer first.' }); return; }
+    try {
+      const found = await findUserByEmail(email);
+      if (!found) { setRequestStatus({ type: 'error', msg: 'Friend not found.' }); return; }
+      const offer = stickers.find(s => s.code === offerCode);
+      await sendProposal({
+        fromEmail: auth.currentUser.email,
+        fromUid: auth.currentUser.uid,
+        fromUserId: auth.currentUser.uid,
+        toEmail: email,
+        toUid: found.uid,
+        toUserId: found.uid,
+        giveCode: offer?.code,
+        giveName: offer?.name,
+        giveTeam: offer?.team,
+        wantCode: selectedCard.code,
+        wantName: selectedCard.name,
+        wantTeam: selectedCard.team,
+        message: `I want ${selectedCard.code}. I can offer ${offer?.code}.`,
+        requestType: 'proposal',
+      });
+      setRequestStatus({ type: 'success', msg: `Proposal sent for ${selectedCard.code}!` });
+      setOfferCode('');
+    } catch (err) {
+      setRequestStatus({ type: 'error', msg: err.message });
+    }
+  }
+
+  async function sendInterestRequest() {
+    if (!selectedCard) return;
+    try {
+      const found = await findUserByEmail(email);
+      if (!found) { setRequestStatus({ type: 'error', msg: 'Friend not found.' }); return; }
+      const myWishList = stickers
+        .filter(s => s.wanted)
+        .map(s => ({ code: s.code, name: s.name, team: s.team }));
+      await sendProposal({
+        fromEmail: auth.currentUser.email,
+        fromUid: auth.currentUser.uid,
+        fromUserId: auth.currentUser.uid,
+        toEmail: email,
+        toUid: found.uid,
+        toUserId: found.uid,
+        giveCode: '',
+        giveName: '',
+        giveTeam: '',
+        wantCode: selectedCard.code,
+        wantName: selectedCard.name,
+        wantTeam: selectedCard.team,
+        message: interestMessage,
+        requestType: 'interest',
+        attachedWantList: myWishList,
+      });
+      setRequestStatus({ type: 'success', msg: `Interest request sent for ${selectedCard.code}!` });
+      setOfferCode('');
+    } catch (err) {
+      setRequestStatus({ type: 'error', msg: err.message });
+    }
+  }
+
+  const myDups = stickers.filter(s => s.duplicate && s.dupCount > 0);
+  const myWishList = stickers.filter(s => s.wanted);
+  const friendWantList = theirStickers?.stickers.filter(s => s.wanted) || [];
+  const friendWantCodes = new Set(friendWantList.map(s => s.code));
+  const matchingOffers = myDups.filter(s => friendWantCodes.has(s.code));
 
   return (
     <div className="trade-section">
@@ -162,20 +244,99 @@ function FindTab({ stickers }) {
       )}
 
       {resultInfo && !showingStickers && (
-        <div className="trade-need-grid">
-          {canGet.length === 0 ? (
-            <div className="trade-empty">
-              <span className="te-icon">🎉</span>
-              You already have all their duplicates!
-            </div>
-          ) : (
-            canGet.map(s => (
-              <div key={s.code} className="trade-need-badge">
-                <span className="tnb-code">{s.code}</span>
-                <span className="tnb-name">{s.name}</span>
-                <span className="tnb-team">{s.team}</span>
+        <>
+          <div style={{ marginBottom: 12, fontSize: 13, color: 'var(--muted)' }}>
+            Click a duplicate card to see their want list and propose a swap or send an interest request.
+          </div>
+          <div className="trade-need-grid">
+            {canGet.length === 0 ? (
+              <div className="trade-empty">
+                <span className="te-icon">🎉</span>
+                You already have all their duplicates!
               </div>
-            ))
+            ) : (
+              canGet.map(s => (
+                <button
+                  key={s.code}
+                  type="button"
+                  className={`trade-need-badge${selectedCard?.code === s.code ? ' selected' : ''}`}
+                  onClick={() => selectCard(s)}
+                >
+                  <span className="tnb-code">{s.code}</span>
+                  <span className="tnb-name">{s.name}</span>
+                  <span className="tnb-team">{s.team}</span>
+                </button>
+              ))
+            )}
+          </div>
+        </>
+      )}
+
+      {selectedCard && (
+        <div className="trade-selected-panel">
+          <div className="trade-selected-header">
+            <h4>🎯 I want this card</h4>
+            <div>
+              <strong>{selectedCard.code}</strong> — {selectedCard.name} ({selectedCard.team})
+            </div>
+          </div>
+
+          <div className="trade-panel-block">
+            <div>
+              <div className="trade-panel-title">Their wish list</div>
+              {friendWantList.length === 0 ? (
+                <div className="trade-empty">They haven’t marked any wants yet.</div>
+              ) : (
+                <div className="trade-need-grid">
+                  {friendWantList.map(s => (
+                    <div key={s.code} className="trade-need-badge small">
+                      <span className="tnb-code">{s.code}</span>
+                      <span className="tnb-name">{s.name}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div>
+              <div className="trade-panel-title">Your duplicates</div>
+              {myDups.length === 0 ? (
+                <div className="trade-empty">You have no duplicates available to offer.</div>
+              ) : (
+                <div className="trade-need-grid">
+                  {myDups.map(s => (
+                    <div key={s.code} className={`trade-need-badge small${offerCode === s.code ? ' selected' : ''}`} onClick={() => setOfferCode(s.code)}>
+                      <span className="tnb-code">{s.code}</span>
+                      <span className="tnb-name">{s.name}</span>
+                      <span className="tnb-team">{s.team}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="trade-panel-actions">
+            <button className="btn-send-proposal" onClick={sendOfferToFriend} disabled={!offerCode}>
+              🔁 Propose this trade
+            </button>
+            <button className="btn-contact" onClick={sendInterestRequest}>
+              💬 Send interest request
+            </button>
+          </div>
+
+          <div className="trade-panel-message">
+            <label>Message</label>
+            <textarea
+              value={interestMessage}
+              onChange={e => setInterestMessage(e.target.value)}
+              rows={3}
+            />
+          </div>
+
+          {requestStatus && (
+            <div className={`trade-status ${requestStatus.type}`} style={{ marginTop: 12 }}>
+              {requestStatus.msg}
+            </div>
           )}
         </div>
       )}
@@ -476,6 +637,21 @@ function IncomingProposals({ stickers, onTradeAccepted }) {
                 They give: <strong style={{ color: 'var(--green)' }}>{p.giveCode} – {p.giveName}</strong><br />
                 They want: <strong style={{ color: 'var(--red)' }}>{p.wantCode} – {p.wantName}</strong>
               </div>
+              {p.message && (
+                <div className="pc-message">
+                  <strong>Message:</strong> {p.message}
+                </div>
+              )}
+              {p.attachedWantList?.length > 0 && (
+                <div className="pc-attachment">
+                  <div style={{ fontSize: 12, marginBottom: 6 }}>📌 Attached want list:</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {p.attachedWantList.map(item => (
+                      <span key={item.code} className="board-dup-chip">{item.code}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="pc-actions">
                 <button className="btn-accept" onClick={() => respond(p.id, 'accept', p)}>✅ Accept</button>
                 <button className="btn-reject" onClick={() => respond(p.id, 'reject', p)}>✕ Decline</button>
@@ -493,6 +669,7 @@ function IncomingProposals({ stickers, onTradeAccepted }) {
 /* ─────────────────────────────────────── */
 function BoardTab({ stickers }) {
   const [board, setBoard] = useState(null);
+  const [publishMessage, setPublishMessage] = useState('');
 
   async function load() {
     try {
@@ -507,7 +684,7 @@ function BoardTab({ stickers }) {
 
   async function publish() {
     const dups    = stickers.filter(s => s.duplicate && s.dupCount > 0);
-    if (!dups.length) { alert('You have no duplicates to publish!'); return; }
+    if (!dups.length) { setPublishMessage('You have no duplicates to publish.'); return; }
     const missing = stickers.filter(s => !s.owned).slice(0, 20);
     try {
       await publishToBoard(
@@ -516,10 +693,11 @@ function BoardTab({ stickers }) {
         dups.map(s => ({ code: s.code, name: s.name, team: s.team, qty: s.dupCount })),
         missing.map(s => ({ code: s.code, name: s.name })),
       );
-      alert('✅ Your duplicates are now on the public trade board!');
+      setPublishMessage('✅ Your duplicates are now on the public trade board!');
       load();
+      window.setTimeout(() => setPublishMessage(''), 3000);
     } catch (e) {
-      alert('Error: ' + e.message);
+      setPublishMessage('Error: ' + e.message);
     }
   }
 
@@ -534,6 +712,9 @@ function BoardTab({ stickers }) {
       >
         📋 Publish My Duplicates
       </button>
+      {publishMessage && (
+        <div className="board-publish-toast">{publishMessage}</div>
+      )}
 
       <div className="public-board-list">
         {board === null ? (

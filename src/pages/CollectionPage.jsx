@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 
-export default function CollectionPage({ stickers, onToggleOwned, onAddDup, onRemoveDup, onBulkOwned, onBulkDup, initialTeam }) {
+export default function CollectionPage({ stickers, onToggleOwned, onAddDup, onRemoveDup, onBulkOwned, onBulkDup, onToggleWanted, initialTeam }) {
   const [search,       setSearch]       = useState('');
   const [teamFilter,   setTeamFilter]   = useState(initialTeam || '');
   const [statusFilter, setStatusFilter] = useState('');
@@ -17,6 +17,7 @@ export default function CollectionPage({ stickers, onToggleOwned, onAddDup, onRe
       if (statusFilter === 'owned'     && !s.owned)                return false;
       if (statusFilter === 'missing'   &&  s.owned)                return false;
       if (statusFilter === 'duplicate' && !s.duplicate)            return false;
+      if (statusFilter === 'wanted'    && !s.wanted)              return false;
       return true;
     });
   }, [stickers, search, teamFilter, statusFilter]);
@@ -72,6 +73,7 @@ export default function CollectionPage({ stickers, onToggleOwned, onAddDup, onRe
           <option value="owned">Owned</option>
           <option value="missing">Missing</option>
           <option value="duplicate">Duplicates</option>
+          <option value="wanted">Want list</option>
         </select>
         <button
           className="btn-bulk"
@@ -109,6 +111,7 @@ export default function CollectionPage({ stickers, onToggleOwned, onAddDup, onRe
               <th>Name</th>
               <th>Team</th>
               <th>Status</th>
+              <th>Wish</th>
               <th>Repeated</th>
             </tr>
           </thead>
@@ -146,6 +149,14 @@ export default function CollectionPage({ stickers, onToggleOwned, onAddDup, onRe
                       onClick={() => onToggleOwned(sticker.code)}
                     >
                       {sticker.owned ? '✅ Owned' : 'Missing'}
+                    </button>
+                  </td>
+                  <td>
+                    <button
+                      className={`want-btn${sticker.wanted ? ' active' : ''}`}
+                      onClick={() => onToggleWanted(sticker.code)}
+                    >
+                      {sticker.wanted ? '❤️ Wanted' : '♡ Want'}
                     </button>
                   </td>
                   <td>

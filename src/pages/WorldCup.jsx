@@ -101,7 +101,7 @@ export default function WorldCupPage({
           </div>
         </div>
       </div>
-      
+
       <div className="worldcup-tabs">
         {tabs.map(tab => (
           <button
@@ -123,6 +123,7 @@ export default function WorldCupPage({
             onRemoveDup={onRemoveDup}
             onBulkOwned={onBulkOwned}
             onBulkDup={onBulkDup}
+            onToggleWanted={onToggleWanted}
             initialTeam={selectedTeam}
           />
         )}

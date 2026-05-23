@@ -95,6 +95,15 @@ export default function App() {
     await persistData();
   }, [persistData]);
 
+  const handleToggleWanted = useCallback(async (code) => {
+    const next = stickersRef.current.map(s =>
+      s.code === code ? { ...s, wanted: !s.wanted } : s
+    );
+    setStickers([...next]);
+    stickersRef.current = next;
+    await persistData();
+  }, [persistData]);
+
   const handleBulkOwned = useCallback(async (codes) => {
     const codeSet = new Set(codes);
     const next = stickersRef.current.map(s =>
