@@ -214,6 +214,7 @@ export default function App() {
             onBulkOwned={handleBulkOwned}
             onBulkDup={handleBulkDup}
             onRemoveAllDup={handleRemoveAllDup}
+            onToggleWanted={handleToggleWanted}
             onTradeAccepted={handleTradeAccepted}
             initialTeam={teamNavTarget}
           />

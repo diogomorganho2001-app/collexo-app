@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 
 export default function CollectionPage({ stickers, onToggleOwned, onAddDup, onRemoveDup, onBulkOwned, onBulkDup, onToggleWanted, initialTeam }) {
   const [search,       setSearch]       = useState('');
