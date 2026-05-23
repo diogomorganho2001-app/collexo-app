@@ -41,11 +41,25 @@ export async function sendProposal({ fromEmail, fromUid, fromUserId, toEmail, to
   });
 }
 
-/** Fetch all pending proposals addressed to the current user ID. */
+/** Fetch all pending proposals addressed to the current user ID.
+ *  Queries both toUserId and toUid to handle proposals created by
+ *  either field, then deduplicates by document ID.
+ */
 export async function loadIncomingProposals(toUserId) {
-  const q    = query(collection(db, 'proposals'), where('toUserId', '==', toUserId), where('status', '==', 'pending'));
-  const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const q1 = query(collection(db, 'proposals'), where('toUserId', '==', toUserId), where('status', '==', 'pending'));
+  const q2 = query(collection(db, 'proposals'), where('toUid',    '==', toUserId), where('status', '==', 'pending'));
+
+  const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
+
+  const seen = new Set();
+  const results = [];
+  for (const d of [...snap1.docs, ...snap2.docs]) {
+    if (!seen.has(d.id)) {
+      seen.add(d.id);
+      results.push({ id: d.id, ...d.data() });
+    }
+  }
+  return results;
 }
 
 /** Accept or reject a proposal by ID. */

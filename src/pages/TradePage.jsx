@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   findUserByEmail,
   searchUsersByEmail,
@@ -16,19 +16,32 @@ import { auth } from '../services/firebase.js';
 /*  FIND sub-tab                           */
 /* ─────────────────────────────────────── */
 function FindTab({ stickers }) {
-  const [email,         setEmail]         = useState('');
-  const [searchResults, setSearchResults] = useState([]);
-  const [status,        setStatus]        = useState(null);   // { type: 'loading'|'error'|'ok', msg }
-  const [resultInfo,    setResultInfo]    = useState(null);
-  const [canGet,        setCanGet]        = useState([]);
-  const [theirStickers, setTheirStickers] = useState(null);
-  const [showingStickers, setShowingStickers] = useState(false);
-  const [selectedCard,  setSelectedCard]  = useState(null);
-  const [offerCode,     setOfferCode]     = useState('');
-  const [requestStatus, setRequestStatus] = useState(null);
-  const [interestMessage, setInterestMessage] = useState('Hey I want this card, can you check my list and see if there is any of your interest?');
+  const [email,            setEmail]            = useState('');
+  const [searchResults,    setSearchResults]    = useState([]);
+  const [status,           setStatus]           = useState(null);
+  const [resultInfo,       setResultInfo]       = useState(null);
+  const [canGet,           setCanGet]           = useState([]);
+  const [theirStickers,    setTheirStickers]    = useState(null);
+  const [showingStickers,  setShowingStickers]  = useState(false);
+  const [selectedCard,     setSelectedCard]     = useState(null);
+  const [offerCode,        setOfferCode]        = useState('');
+  const [offerSearch,      setOfferSearch]      = useState('');
+  const [dropdownOpen,     setDropdownOpen]     = useState(false);
+  const [requestStatus,    setRequestStatus]    = useState(null);
+  const [interestMessage,  setInterestMessage]  = useState('Hey I want this card, can you check my list and see if there is any of your interest?');
+  const dropdownRef = useRef(null);
 
-  // Handle email search with debounce
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   async function handleEmailSearch(value) {
     setEmail(value);
     if (value.length < 2) {
@@ -39,19 +52,22 @@ function FindTab({ stickers }) {
     }
   }
 
-  // Select a user from search results
   async function selectUser(selectedEmail) {
     setEmail(selectedEmail);
     setSearchResults([]);
     setShowingStickers(false);
     setSelectedCard(null);
+    setOfferCode('');
+    setOfferSearch('');
     await checkTrade(selectedEmail);
   }
 
   async function selectCard(card) {
     setSelectedCard(card);
     setOfferCode('');
+    setOfferSearch('');
     setRequestStatus(null);
+    setDropdownOpen(false);
     if (!theirStickers || theirStickers.email !== email) {
       await viewTheirStickers();
     }
@@ -117,8 +133,9 @@ function FindTab({ stickers }) {
         message: `I want ${selectedCard.code}. I can offer ${offer?.code}.`,
         requestType: 'proposal',
       });
-      setRequestStatus({ type: 'success', msg: `Proposal sent for ${selectedCard.code}!` });
+      setRequestStatus({ type: 'success', msg: `✅ Proposal sent for ${selectedCard.code}!` });
       setOfferCode('');
+      setOfferSearch('');
     } catch (err) {
       setRequestStatus({ type: 'error', msg: err.message });
     }
@@ -139,9 +156,9 @@ function FindTab({ stickers }) {
         toEmail: email,
         toUid: found.uid,
         toUserId: found.uid,
-        giveCode: '',
-        giveName: '',
-        giveTeam: '',
+        giveCode: offerCode || '',
+        giveName: offerCode ? stickers.find(s => s.code === offerCode)?.name || '' : '',
+        giveTeam: offerCode ? stickers.find(s => s.code === offerCode)?.team || '' : '',
         wantCode: selectedCard.code,
         wantName: selectedCard.name,
         wantTeam: selectedCard.team,
@@ -149,18 +166,36 @@ function FindTab({ stickers }) {
         requestType: 'interest',
         attachedWantList: myWishList,
       });
-      setRequestStatus({ type: 'success', msg: `Interest request sent for ${selectedCard.code}!` });
+      setRequestStatus({ type: 'success', msg: `✅ Interest request sent for ${selectedCard.code}!` });
       setOfferCode('');
+      setOfferSearch('');
     } catch (err) {
       setRequestStatus({ type: 'error', msg: err.message });
     }
   }
 
   const myDups = stickers.filter(s => s.duplicate && s.dupCount > 0);
-  const myWishList = stickers.filter(s => s.wanted);
   const friendWantList = theirStickers?.stickers.filter(s => s.wanted) || [];
   const friendWantCodes = new Set(friendWantList.map(s => s.code));
-  const matchingOffers = myDups.filter(s => friendWantCodes.has(s.code));
+
+  // Filtered duplicates for the searchable dropdown
+  const filteredMyDups = myDups.filter(s =>
+    !offerSearch ||
+    s.code.toLowerCase().includes(offerSearch.toLowerCase()) ||
+    s.name.toLowerCase().includes(offerSearch.toLowerCase()) ||
+    s.team.toLowerCase().includes(offerSearch.toLowerCase())
+  );
+
+  const selectedOfferSticker = myDups.find(s => s.code === offerCode);
+
+  // When clicking a wish-list item: auto-select matching duplicate if we have it
+  function handleWishListClick(wishItem) {
+    const myMatchingDup = myDups.find(s => s.code === wishItem.code);
+    if (myMatchingDup) {
+      setOfferCode(myMatchingDup.code);
+      setOfferSearch(myMatchingDup.code + ' – ' + myMatchingDup.name);
+    }
+  }
 
   return (
     <div className="trade-section">
@@ -233,7 +268,7 @@ function FindTab({ stickers }) {
               <span className="tc-lbl">You need</span>
             </div>
           </div>
-          <button 
+          <button
             className="btn-contact"
             onClick={viewTheirStickers}
             style={{ marginTop: 12 }}
@@ -246,7 +281,7 @@ function FindTab({ stickers }) {
       {resultInfo && !showingStickers && (
         <>
           <div style={{ marginBottom: 12, fontSize: 13, color: 'var(--muted)' }}>
-            Click a duplicate card to see their want list and propose a swap or send an interest request.
+            Click a duplicate card to select it for trade.
           </div>
           <div className="trade-need-grid">
             {canGet.length === 0 ? (
@@ -282,34 +317,117 @@ function FindTab({ stickers }) {
           </div>
 
           <div className="trade-panel-block">
+            {/* Their wish list */}
             <div>
               <div className="trade-panel-title">Their wish list</div>
               {friendWantList.length === 0 ? (
-                <div className="trade-empty">They haven’t marked any wants yet.</div>
+                <div className="trade-empty">They haven't marked any wants yet.</div>
               ) : (
                 <div className="trade-need-grid">
-                  {friendWantList.map(s => (
-                    <div key={s.code} className="trade-need-badge small">
-                      <span className="tnb-code">{s.code}</span>
-                      <span className="tnb-name">{s.name}</span>
-                    </div>
-                  ))}
+                  {friendWantList.map(s => {
+                    const iHaveIt = myDups.some(d => d.code === s.code);
+                    return (
+                      <div
+                        key={s.code}
+                        className={`trade-need-badge small${iHaveIt ? ' match-highlight' : ''}`}
+                        style={iHaveIt ? { cursor: 'pointer', border: '2px solid var(--green)' } : {}}
+                        onClick={() => iHaveIt && handleWishListClick(s)}
+                        title={iHaveIt ? 'You have this duplicate! Click to auto-select it.' : ''}
+                      >
+                        <span className="tnb-code">{s.code}</span>
+                        <span className="tnb-name">{s.name}</span>
+                        {iHaveIt && <span style={{ fontSize: 10, color: 'var(--green)', fontWeight: 700 }}>✓ You have it</span>}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
+
+            {/* Your duplicates — searchable dropdown */}
             <div>
               <div className="trade-panel-title">Your duplicates</div>
               {myDups.length === 0 ? (
                 <div className="trade-empty">You have no duplicates available to offer.</div>
               ) : (
-                <div className="trade-need-grid">
-                  {myDups.map(s => (
-                    <div key={s.code} className={`trade-need-badge small${offerCode === s.code ? ' selected' : ''}`} onClick={() => setOfferCode(s.code)}>
-                      <span className="tnb-code">{s.code}</span>
-                      <span className="tnb-name">{s.name}</span>
-                      <span className="tnb-team">{s.team}</span>
+                <div ref={dropdownRef} style={{ position: 'relative' }}>
+                  <input
+                    type="text"
+                    placeholder="Search your duplicates (code, name, team)…"
+                    value={offerSearch}
+                    onChange={e => {
+                      setOfferSearch(e.target.value);
+                      setOfferCode('');
+                      setDropdownOpen(true);
+                    }}
+                    onFocus={() => setDropdownOpen(true)}
+                    style={{ width: '100%', boxSizing: 'border-box' }}
+                  />
+                  {dropdownOpen && (
+                    <div style={{
+                      position: 'absolute',
+                      top: '100%',
+                      left: 0,
+                      right: 0,
+                      background: 'var(--surface)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 4,
+                      maxHeight: 220,
+                      overflowY: 'auto',
+                      zIndex: 200,
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                    }}>
+                      {filteredMyDups.length === 0 ? (
+                        <div style={{ padding: '10px 12px', fontSize: 13, color: 'var(--muted)' }}>No duplicates match.</div>
+                      ) : (
+                        filteredMyDups.map(s => (
+                          <div
+                            key={s.code}
+                            onClick={() => {
+                              setOfferCode(s.code);
+                              setOfferSearch(s.code + ' – ' + s.name);
+                              setDropdownOpen(false);
+                            }}
+                            style={{
+                              padding: '9px 12px',
+                              borderBottom: '1px solid var(--border)',
+                              cursor: 'pointer',
+                              fontSize: 13,
+                              display: 'flex',
+                              gap: 8,
+                              alignItems: 'center',
+                              background: offerCode === s.code ? 'var(--background)' : 'transparent'
+                            }}
+                            onMouseOver={e => e.currentTarget.style.background = 'var(--background)'}
+                            onMouseOut={e => e.currentTarget.style.background = offerCode === s.code ? 'var(--background)' : 'transparent'}
+                          >
+                            <span style={{ fontWeight: 700, minWidth: 48 }}>{s.code}</span>
+                            <span style={{ flex: 1 }}>{s.name}</span>
+                            <span style={{ fontSize: 11, color: 'var(--muted)' }}>{s.team}</span>
+                            {s.dupCount > 1 && <span style={{ fontSize: 11, color: 'var(--muted)' }}>×{s.dupCount}</span>}
+                          </div>
+                        ))
+                      )}
                     </div>
-                  ))}
+                  )}
+                  {selectedOfferSticker && (
+                    <div style={{
+                      marginTop: 8,
+                      padding: '8px 12px',
+                      background: 'var(--background)',
+                      borderRadius: 4,
+                      fontSize: 13,
+                      borderLeft: '3px solid var(--primary)',
+                      display: 'flex',
+                      gap: 8,
+                      alignItems: 'center'
+                    }}>
+                      <span>🃏 Offering:</span>
+                      <strong>{selectedOfferSticker.code}</strong>
+                      <span>{selectedOfferSticker.name}</span>
+                      <span style={{ color: 'var(--muted)', fontSize: 12 }}>{selectedOfferSticker.team}</span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -345,7 +463,7 @@ function FindTab({ stickers }) {
         <div style={{ marginTop: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <h4 style={{ margin: 0 }}>📇 {theirStickers.email}'s Collection</h4>
-            <button 
+            <button
               className="btn-reject"
               onClick={() => setShowingStickers(false)}
               style={{ padding: '6px 12px', fontSize: 12 }}
@@ -353,7 +471,7 @@ function FindTab({ stickers }) {
               ✕ Close
             </button>
           </div>
-          
+
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 16 }}>
             <div style={{ padding: 12, background: 'var(--background)', borderRadius: 4, borderLeft: '3px solid var(--green)' }}>
               <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Duplicates</div>
@@ -389,203 +507,8 @@ function FindTab({ stickers }) {
 }
 
 /* ─────────────────────────────────────── */
-/*  PROPOSE sub-tab                        */
+/*  Incoming Proposals (shared component) */
 /* ─────────────────────────────────────── */
-function ProposeTab({ stickers, onTradeAccepted }) {
-  const [toEmail,            setToEmail]            = useState('');
-  const [toEmailSearch,      setToEmailSearch]      = useState('');
-  const [toEmailResults,     setToEmailResults]     = useState([]);
-  const [giveCode,           setGiveCode]           = useState('');
-  const [wantCode,           setWantCode]           = useState('');
-  const [giveSearch,         setGiveSearch]         = useState('');
-  const [wantSearch,         setWantSearch]         = useState('');
-  const [giveTeamFilter,     setGiveTeamFilter]     = useState('');
-  const [wantTeamFilter,     setWantTeamFilter]     = useState('');
-
-  const dups    = stickers.filter(s => s.duplicate && s.dupCount > 0);
-  const missing = stickers.filter(s => !s.owned);
-
-  // Get unique teams for filtering
-  const dumpTeams = [...new Set(dups.map(s => s.team))].sort();
-  const missingTeams = [...new Set(missing.map(s => s.team))].sort();
-
-  // Filter duplicates for dropdown
-  const filteredDups = dups
-    .filter(s => !giveTeamFilter || s.team === giveTeamFilter)
-    .filter(s => !giveSearch || 
-      s.code.toLowerCase().includes(giveSearch.toLowerCase()) || 
-      s.name.toLowerCase().includes(giveSearch.toLowerCase())
-    );
-
-  // Filter missing for dropdown
-  const filteredMissing = missing
-    .filter(s => !wantTeamFilter || s.team === wantTeamFilter)
-    .filter(s => !wantSearch || 
-      s.code.toLowerCase().includes(wantSearch.toLowerCase()) || 
-      s.name.toLowerCase().includes(wantSearch.toLowerCase())
-    );
-
-  // Handle recipient email search
-  async function handleRecipientSearch(value) {
-    setToEmailSearch(value);
-    setToEmail(value);
-    if (value.length < 2) {
-      setToEmailResults([]);
-    } else {
-      const results = await searchUsersByEmail(value);
-      setToEmailResults(results);
-    }
-  }
-
-  // Select recipient from search
-  function selectRecipient(email) {
-    setToEmail(email);
-    setToEmailSearch('');
-    setToEmailResults([]);
-  }
-
-  async function handleSend() {
-    const targetEmail = toEmail || toEmailSearch;
-    if (!targetEmail || !giveCode || !wantCode) { alert('Fill all fields'); return; }
-    const giveSt = stickers.find(s => s.code === giveCode);
-    const wantSt = stickers.find(s => s.code === wantCode);
-    try {
-      const found = await findUserByEmail(targetEmail);
-      if (!found) { alert(`User "${targetEmail}" not found.`); return; }
-      await sendProposal({
-        fromEmail: auth.currentUser.email,
-        fromUid:   auth.currentUser.uid,
-        fromUserId: auth.currentUser.uid,
-        toEmail: targetEmail,
-        toUid:     found.uid,
-        toUserId:  found.uid,
-        giveCode,  giveName: giveSt?.name, giveTeam: giveSt?.team,
-        wantCode,  wantName: wantSt?.name, wantTeam: wantSt?.team,
-      });
-      alert(`✅ Proposal sent to ${targetEmail}!`);
-      setToEmail('');
-      setToEmailSearch('');
-      setGiveCode('');
-      setWantCode('');
-    } catch (err) {
-      alert('Error: ' + err.message);
-    }
-  }
-
-  return (
-    <div className="trade-section">
-      <div className="trade-proposal-form">
-        <h3>📨 Send Trade Proposal</h3>
-        
-        <div className="proposal-row">
-          <div className="pf-group">
-            <label>To (Email)</label>
-            <div style={{ position: 'relative' }}>
-              <input
-                type="email"
-                placeholder="Search recipient..."
-                value={toEmailSearch || toEmail}
-                onChange={e => {
-                  if (e.target.value !== toEmail) {
-                    handleRecipientSearch(e.target.value);
-                  }
-                }}
-                style={{ marginTop: 0 }}
-              />
-              {toEmailResults.length > 0 && (
-                <div style={{
-                  position: 'absolute',
-                  top: '100%',
-                  left: 0,
-                  right: 0,
-                  background: 'var(--surface)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 4,
-                  maxHeight: 150,
-                  overflowY: 'auto',
-                  zIndex: 100,
-                  marginTop: 2
-                }}>
-                  {toEmailResults.map(user => (
-                    <div
-                      key={user.uid}
-                      onClick={() => selectRecipient(user.email)}
-                      style={{
-                        padding: '10px 12px',
-                        borderBottom: '1px solid var(--border)',
-                        cursor: 'pointer',
-                        fontSize: 14,
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center'
-                      }}
-                      onMouseOver={e => e.currentTarget.style.background = 'var(--background)'}
-                      onMouseOut={e => e.currentTarget.style.background = 'transparent'}
-                    >
-                      <span>{user.email}</span>
-                      <span style={{ fontSize: 12, color: 'var(--muted)' }}>{user.completionPct}%</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="proposal-row">
-          <div className="pf-group">
-            <label>I Give (my duplicate)</label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
-              <select value={giveTeamFilter} onChange={e => setGiveTeamFilter(e.target.value)} style={{ fontSize: 12 }}>
-                <option value="">All Teams</option>
-                {dumpTeams.map(team => <option key={team} value={team}>{team}</option>)}
-              </select>
-              <input
-                type="text"
-                placeholder="Search code/name..."
-                value={giveSearch}
-                onChange={e => setGiveSearch(e.target.value)}
-                style={{ fontSize: 12 }}
-              />
-            </div>
-            <select value={giveCode} onChange={e => setGiveCode(e.target.value)}>
-              {filteredDups.length === 0
-                ? <option>No duplicates match filters</option>
-                : filteredDups.map(s => <option key={s.code} value={s.code}>{s.code} – {s.name} ({s.team})</option>)
-              }
-            </select>
-          </div>
-          <div className="pf-group">
-            <label>I Want (from them)</label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
-              <select value={wantTeamFilter} onChange={e => setWantTeamFilter(e.target.value)} style={{ fontSize: 12 }}>
-                <option value="">All Teams</option>
-                {missingTeams.map(team => <option key={team} value={team}>{team}</option>)}
-              </select>
-              <input
-                type="text"
-                placeholder="Search code/name..."
-                value={wantSearch}
-                onChange={e => setWantSearch(e.target.value)}
-                style={{ fontSize: 12 }}
-              />
-            </div>
-            <select value={wantCode} onChange={e => setWantCode(e.target.value)}>
-              {filteredMissing.length === 0
-                ? <option>You own everything!</option>
-                : filteredMissing.map(s => <option key={s.code} value={s.code}>{s.code} – {s.name} ({s.team})</option>)
-              }
-            </select>
-          </div>
-        </div>
-        <button className="btn-send-proposal" onClick={handleSend}>📨 Send Proposal</button>
-      </div>
-
-      <IncomingProposals stickers={stickers} onTradeAccepted={onTradeAccepted} />
-    </div>
-  );
-}
-
 function IncomingProposals({ stickers, onTradeAccepted }) {
   const [proposals, setProposals] = useState(null);
 
@@ -606,7 +529,7 @@ function IncomingProposals({ stickers, onTradeAccepted }) {
       await respondToProposal(propId, action);
       if (action === 'accept') {
         onTradeAccepted?.(p);
-        alert(`✅ Trade accepted! You now own ${p.giveName}.`);
+        alert(`✅ Trade accepted! You now own ${p.giveName || p.wantName}.`);
       } else {
         alert('Trade declined.');
       }
@@ -621,7 +544,20 @@ function IncomingProposals({ stickers, onTradeAccepted }) {
   return (
     <>
       <div style={{ marginTop: 16 }}>
-        <div className="section-title" style={{ padding: '0 0 0 0' }}>📬 Incoming Proposals</div>
+        <div className="section-title" style={{ padding: '0 0 8px 0' }}>
+          📬 Incoming Proposals
+          {proposals.length > 0 && (
+            <span style={{
+              marginLeft: 8,
+              background: 'var(--red)',
+              color: '#fff',
+              borderRadius: 99,
+              fontSize: 11,
+              padding: '2px 8px',
+              fontWeight: 700
+            }}>{proposals.length}</span>
+          )}
+        </div>
       </div>
       <div className="proposals-list">
         {proposals.length === 0 ? (
@@ -634,8 +570,14 @@ function IncomingProposals({ stickers, onTradeAccepted }) {
                 <span className="pc-badge">⏳ Pending</span>
               </div>
               <div className="pc-swap">
-                They give: <strong style={{ color: 'var(--green)' }}>{p.giveCode} – {p.giveName}</strong><br />
-                They want: <strong style={{ color: 'var(--red)' }}>{p.wantCode} – {p.wantName}</strong>
+                {p.requestType === 'interest' ? (
+                  <>They're interested in: <strong style={{ color: 'var(--red)' }}>{p.wantCode} – {p.wantName}</strong></>
+                ) : (
+                  <>
+                    They give: <strong style={{ color: 'var(--green)' }}>{p.giveCode} – {p.giveName}</strong><br />
+                    They want: <strong style={{ color: 'var(--red)' }}>{p.wantCode} – {p.wantName}</strong>
+                  </>
+                )}
               </div>
               {p.message && (
                 <div className="pc-message">
@@ -644,7 +586,7 @@ function IncomingProposals({ stickers, onTradeAccepted }) {
               )}
               {p.attachedWantList?.length > 0 && (
                 <div className="pc-attachment">
-                  <div style={{ fontSize: 12, marginBottom: 6 }}>📌 Attached want list:</div>
+                  <div style={{ fontSize: 12, marginBottom: 6 }}>📌 Their want list:</div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                     {p.attachedWantList.map(item => (
                       <span key={item.code} className="board-dup-chip">{item.code}</span>
@@ -653,7 +595,9 @@ function IncomingProposals({ stickers, onTradeAccepted }) {
                 </div>
               )}
               <div className="pc-actions">
-                <button className="btn-accept" onClick={() => respond(p.id, 'accept', p)}>✅ Accept</button>
+                {p.requestType !== 'interest' && (
+                  <button className="btn-accept" onClick={() => respond(p.id, 'accept', p)}>✅ Accept</button>
+                )}
                 <button className="btn-reject" onClick={() => respond(p.id, 'reject', p)}>✕ Decline</button>
               </div>
             </div>
@@ -765,7 +709,7 @@ function BoardTab({ stickers }) {
 /* ─────────────────────────────────────── */
 /*  HISTORY sub-tab                        */
 /* ─────────────────────────────────────── */
-function HistoryTab({ tradeHistory }) {
+function HistoryTab() {
   const [allTrades, setAllTrades] = useState(null);
 
   async function loadHistory() {
@@ -786,14 +730,16 @@ function HistoryTab({ tradeHistory }) {
   return (
     <div className="trade-section">
       <div className="trade-history-list">
-        {trades.length === 0 ? (
+        {allTrades === null ? (
+          <div className="trade-empty"><span className="te-icon">⏳</span>Loading…</div>
+        ) : trades.length === 0 ? (
           <div className="trade-empty"><span className="te-icon">📜</span>No completed trades yet</div>
         ) : (
           trades.map((t, i) => (
             <div key={i} className="trade-history-card">
               <div className="th-header">
                 <span className="th-partner">
-                  {t.direction === 'sent' ? '📤' : '📥'} 
+                  {t.direction === 'sent' ? '📤' : '📥'}
                   {t.direction === 'sent' ? t.toEmail : t.fromEmail}
                 </span>
                 <span className="th-date" style={{ fontSize: 12 }}>
@@ -831,7 +777,7 @@ export default function TradePage({ stickers, tradeHistory, onTradeAccepted }) {
 
   const tabs = [
     { id: 'find',    label: '🔍 Find'    },
-    { id: 'propose', label: '📨 Propose' },
+    { id: 'inbox',   label: '📬 Inbox'   },
     { id: 'board',   label: '📋 Board'   },
     { id: 'history', label: '📜 History' },
   ];
@@ -850,10 +796,14 @@ export default function TradePage({ stickers, tradeHistory, onTradeAccepted }) {
         ))}
       </div>
 
-      {activeTab === 'find'    && <FindTab    stickers={stickers} />}
-      {activeTab === 'propose' && <ProposeTab stickers={stickers} onTradeAccepted={onTradeAccepted} />}
-      {activeTab === 'board'   && <BoardTab   stickers={stickers} />}
-      {activeTab === 'history' && <HistoryTab tradeHistory={tradeHistory} />}
+      {activeTab === 'find'    && <FindTab stickers={stickers} />}
+      {activeTab === 'inbox'   && (
+        <div className="trade-section">
+          <IncomingProposals stickers={stickers} onTradeAccepted={onTradeAccepted} />
+        </div>
+      )}
+      {activeTab === 'board'   && <BoardTab stickers={stickers} />}
+      {activeTab === 'history' && <HistoryTab />}
     </section>
   );
 }
