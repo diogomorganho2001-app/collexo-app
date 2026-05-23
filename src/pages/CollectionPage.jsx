@@ -154,7 +154,7 @@ export default function CollectionPage({ stickers, onToggleOwned, onAddDup, onRe
                   <td>
                     <button
                       className={`want-btn${sticker.wanted ? ' active' : ''}`}
-                      onClick={() => onToggleWanted(sticker.code)}
+                      onClick={() => onToggleWanted?.(sticker.code)}
                     >
                       {sticker.wanted ? '❤️ Wanted' : '♡ Want'}
                     </button>

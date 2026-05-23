@@ -10,6 +10,7 @@ export default function WorldCupPage({
   tradeHistory,
   onTeamClick,
   onToggleOwned,
+  onToggleWanted,
   onAddDup,
   onRemoveDup,
   onBulkOwned,
