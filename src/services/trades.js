@@ -7,6 +7,7 @@ import {
   updateDoc,
   doc,
   serverTimestamp,
+  orderBy,
 } from 'firebase/firestore';
 import { db } from './firebase.js';
 
@@ -66,6 +67,64 @@ export async function loadIncomingProposals(toUserId) {
 export async function respondToProposal(propId, action) {
   await updateDoc(doc(db, 'proposals', propId), {
     status: action === 'accept' ? 'accepted' : 'rejected',
+  });
+}
+
+/** Create or return an existing chat room for an accepted proposal. */
+export async function createChatRoomForProposal(proposal) {
+  if (!proposal || !proposal.id) return null;
+  const chatQuery = query(collection(db, 'chats'), where('tradeId', '==', proposal.id));
+  const chatSnap = await getDocs(chatQuery);
+  if (!chatSnap.empty) {
+    return { id: chatSnap.docs[0].id, ...chatSnap.docs[0].data() };
+  }
+
+  const room = {
+    tradeId: proposal.id,
+    tradeType: proposal.requestType || 'proposal',
+    participantIds: [proposal.fromUid, proposal.toUid].filter(Boolean),
+    participantEmails: [proposal.fromEmail, proposal.toEmail],
+    fromUid: proposal.fromUid,
+    toUid: proposal.toUid,
+    lastMessage: '',
+    lastUpdated: serverTimestamp(),
+    createdAt: serverTimestamp(),
+  };
+
+  const roomRef = await addDoc(collection(db, 'chats'), room);
+  return { id: roomRef.id, ...room };
+}
+
+export async function loadChatRooms(userId) {
+  const q = query(
+    collection(db, 'chats'),
+    where('participantIds', 'array-contains', userId),
+    orderBy('lastUpdated', 'desc')
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+export async function loadChatMessages(chatId) {
+  const q = query(
+    collection(db, 'chats', chatId, 'messages'),
+    orderBy('createdAt', 'asc')
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+export async function sendChatMessage(chatId, senderId, senderEmail, text) {
+  if (!text || !text.trim()) return;
+  await addDoc(collection(db, 'chats', chatId, 'messages'), {
+    senderId,
+    senderEmail,
+    text: text.trim(),
+    createdAt: serverTimestamp(),
+  });
+  await updateDoc(doc(db, 'chats', chatId), {
+    lastMessage: text.trim(),
+    lastUpdated: serverTimestamp(),
   });
 }
 

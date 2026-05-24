@@ -71,22 +71,22 @@ export default function WorldCupPage({
       <div className="worldcup-summary">
         <div className="stats">
           <div className="stat-card owned">
-            <span className="stat-icon">✅</span>
+            <div className="stat-icon-wrap">✅</div>
             <div className="stat-val">{owned}</div>
             <div className="stat-lbl">Owned</div>
           </div>
           <div className="stat-card missing">
-            <span className="stat-icon">🔍</span>
+            <div className="stat-icon-wrap">🔍</div>
             <div className="stat-val">{missing}</div>
             <div className="stat-lbl">Missing</div>
           </div>
           <div className="stat-card repeated">
-            <span className="stat-icon">🔄</span>
+            <div className="stat-icon-wrap">🔄</div>
             <div className="stat-val">{duplicates}</div>
             <div className="stat-lbl">Repeated</div>
           </div>
           <div className="stat-card total">
-            <span className="stat-icon">📚</span>
+            <div className="stat-icon-wrap">📚</div>
             <div className="stat-val">{stickers.length}</div>
             <div className="stat-lbl">Total</div>
           </div>

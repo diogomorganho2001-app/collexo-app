@@ -6,6 +6,10 @@ import {
   sendProposal,
   loadIncomingProposals,
   respondToProposal,
+  createChatRoomForProposal,
+  loadChatRooms,
+  loadChatMessages,
+  sendChatMessage,
   publishToBoard,
   fetchPublicBoard,
   loadAllTradeHistory,
@@ -200,7 +204,7 @@ function FindTab({ stickers }) {
   return (
     <div className="trade-section">
       <div className="trade-find-form">
-        <h3>🔍 Find Trade Partner</h3>
+        <h3>Find trade partner</h3>
         <div className="trade-search-row">
           <div style={{ position: 'relative', flex: 1 }}>
             <input
@@ -273,7 +277,7 @@ function FindTab({ stickers }) {
             onClick={viewTheirStickers}
             style={{ marginTop: 12 }}
           >
-            👁️ View Their Stickers
+            View Partner Collection
           </button>
         </div>
       )}
@@ -310,7 +314,7 @@ function FindTab({ stickers }) {
       {selectedCard && (
         <div className="trade-selected-panel">
           <div className="trade-selected-header">
-            <h4>🎯 I want this card</h4>
+            <h4>Selected target sticker</h4>
             <div>
               <strong>{selectedCard.code}</strong> — {selectedCard.name} ({selectedCard.team})
             </div>
@@ -433,12 +437,12 @@ function FindTab({ stickers }) {
             </div>
           </div>
 
-          <div className="trade-panel-actions">
+              <div className="trade-panel-actions">
             <button className="btn-send-proposal" onClick={sendOfferToFriend} disabled={!offerCode}>
-              🔁 Propose this trade
+              Propose Trade
             </button>
             <button className="btn-contact" onClick={sendInterestRequest}>
-              💬 Send interest request
+              Send Interest Request
             </button>
           </div>
 
@@ -528,8 +532,9 @@ function IncomingProposals({ stickers, onTradeAccepted }) {
     try {
       await respondToProposal(propId, action);
       if (action === 'accept') {
+        await createChatRoomForProposal(p);
         onTradeAccepted?.(p);
-        alert(`✅ Trade accepted! You now own ${p.giveName || p.wantName}.`);
+        alert('✅ Trade accepted! A private chat room is now available.');
       } else {
         alert('Trade declined.');
       }
@@ -545,7 +550,7 @@ function IncomingProposals({ stickers, onTradeAccepted }) {
     <>
       <div style={{ marginTop: 16 }}>
         <div className="section-title" style={{ padding: '0 0 8px 0' }}>
-          📬 Incoming Proposals
+          Incoming requests
           {proposals.length > 0 && (
             <span style={{
               marginLeft: 8,
@@ -561,7 +566,7 @@ function IncomingProposals({ stickers, onTradeAccepted }) {
       </div>
       <div className="proposals-list">
         {proposals.length === 0 ? (
-          <div className="trade-empty"><span className="te-icon">📭</span>No incoming proposals</div>
+          <div className="trade-empty"><span className="te-icon">✉️</span>No incoming proposals</div>
         ) : (
           proposals.map(p => (
             <div key={p.id} className="proposal-card">
@@ -596,15 +601,164 @@ function IncomingProposals({ stickers, onTradeAccepted }) {
               )}
               <div className="pc-actions">
                 {p.requestType !== 'interest' && (
-                  <button className="btn-accept" onClick={() => respond(p.id, 'accept', p)}>✅ Accept</button>
+                  <button className="btn-accept" onClick={() => respond(p.id, 'accept', p)}>Accept</button>
                 )}
-                <button className="btn-reject" onClick={() => respond(p.id, 'reject', p)}>✕ Decline</button>
+                <button className="btn-reject" onClick={() => respond(p.id, 'reject', p)}>Decline</button>
               </div>
             </div>
           ))
         )}
       </div>
     </>
+  );
+}
+
+function ChatTab() {
+  const [rooms, setRooms] = useState(null);
+  const [activeRoom, setActiveRoom] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [sending, setSending] = useState(false);
+
+  async function loadRooms() {
+    if (!auth.currentUser) return;
+    setLoading(true);
+    try {
+      const list = await loadChatRooms(auth.currentUser.uid);
+      setRooms(list);
+      if (list.length && !activeRoom) {
+        setActiveRoom(list[0]);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadMessagesForRoom(room) {
+    if (!room) {
+      setMessages([]);
+      return;
+    }
+    try {
+      const msgs = await loadChatMessages(room.id);
+      setMessages(msgs);
+    } catch (err) {
+      console.error('Failed to load chat messages', err);
+      setMessages([]);
+    }
+  }
+
+  useEffect(() => { loadRooms(); }, []);
+  useEffect(() => { loadMessagesForRoom(activeRoom); }, [activeRoom]);
+
+  async function handleSend() {
+    if (!activeRoom || !newMessage.trim()) return;
+    setSending(true);
+    try {
+      await sendChatMessage(activeRoom.id, auth.currentUser.uid, auth.currentUser.email, newMessage);
+      setNewMessage('');
+      await loadMessagesForRoom(activeRoom);
+      await loadRooms();
+    } catch (err) {
+      console.error('Failed to send message', err);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  function getPartnerEmail(room) {
+    return room?.participantEmails?.find(email => email !== auth.currentUser.email) || room?.participantEmails?.[0] || 'Partner';
+  }
+
+  function formatDisplayName(email) {
+    if (!email) return 'Partner';
+    return email.includes('@') ? email.split('@')[0] : email;
+  }
+
+  function formatRoomType(type) {
+    if (type === 'interest') return 'Interest request';
+    if (type === 'proposal') return 'Trade chat';
+    return `${type ? type.charAt(0).toUpperCase() + type.slice(1) : 'Trade'} chat`;
+  }
+
+  const partnerEmail = getPartnerEmail(activeRoom);
+  const partnerName = formatDisplayName(partnerEmail);
+  const roomLabel = activeRoom ? `${partnerName} · ${formatRoomType(activeRoom.tradeType)}` : '';
+
+  return (
+    <div className="trade-section">
+      <div className="chat-layout">
+        <div className="chat-rooms-panel">
+          <div className="section-title">Chats</div>
+          {loading && <div className="trade-empty">Loading chats…</div>}
+          {!loading && rooms?.length === 0 && (
+            <div className="trade-empty">No active chats yet. Accept a trade to start a conversation.</div>
+          )}
+          {!loading && rooms?.length > 0 && (
+            <div className="chat-room-list">
+              {rooms.map(room => {
+                const partnerEmail = getPartnerEmail(room);
+                const partnerName = formatDisplayName(partnerEmail);
+                const roomType = formatRoomType(room.tradeType);
+                return (
+                  <button
+                    key={room.id}
+                    type="button"
+                    className={activeRoom?.id === room.id ? 'chat-room-item active' : 'chat-room-item'}
+                    onClick={() => setActiveRoom(room)}
+                  >
+                    <div className="chat-room-title">{roomType} · {partnerName}</div>
+                    <div className="chat-room-subtitle">{room.lastMessage || 'No messages yet'}</div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="chat-thread-panel">
+          {!activeRoom ? (
+            <div className="trade-empty">Select a chat to continue the conversation.</div>
+          ) : (
+            <>
+              <div className="chat-thread-header">
+                <div>
+                  <div className="chat-thread-title">{roomLabel}</div>
+                  <div className="chat-thread-meta">Trade ID: {activeRoom.tradeId}</div>
+                </div>
+              </div>
+              <div className="chat-messages">
+                {messages.length === 0 ? (
+                  <div className="trade-empty">No messages yet. Send the first note.</div>
+                ) : (
+                  messages.map(msg => (
+                    <div
+                      key={msg.id}
+                      className={msg.senderId === auth.currentUser.uid ? 'chat-message mine' : 'chat-message'}
+                    >
+                      <div className="chat-message-body">{msg.text}</div>
+                      <div className="chat-message-meta">{msg.senderEmail}</div>
+                    </div>
+                  ))
+                )}
+              </div>
+              <div className="chat-input-row">
+                <textarea
+                  value={newMessage}
+                  onChange={e => setNewMessage(e.target.value)}
+                  placeholder="Write a message to coordinate the trade..."
+                  rows={3}
+                />
+                <button className="btn-send-proposal" onClick={handleSend} disabled={sending || !newMessage.trim()}>
+                  Send
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -776,10 +930,11 @@ export default function TradePage({ stickers, tradeHistory, onTradeAccepted }) {
   const [activeTab, setActiveTab] = useState('find');
 
   const tabs = [
-    { id: 'find',    label: '🔍 Find'    },
-    { id: 'inbox',   label: '📬 Inbox'   },
-    { id: 'board',   label: '📋 Board'   },
-    { id: 'history', label: '📜 History' },
+    { id: 'find',    label: 'Find'    },
+    { id: 'inbox',   label: 'Inbox'   },
+    { id: 'chat',    label: 'Chats'   },
+    { id: 'board',   label: 'Board'   },
+    { id: 'history', label: 'History' },
   ];
 
   return (
@@ -802,6 +957,7 @@ export default function TradePage({ stickers, tradeHistory, onTradeAccepted }) {
           <IncomingProposals stickers={stickers} onTradeAccepted={onTradeAccepted} />
         </div>
       )}
+      {activeTab === 'chat'    && <ChatTab />}
       {activeTab === 'board'   && <BoardTab stickers={stickers} />}
       {activeTab === 'history' && <HistoryTab />}
     </section>
