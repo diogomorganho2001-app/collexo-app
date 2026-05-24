@@ -74,18 +74,23 @@ export default function CollectionPage({ stickers, onToggleOwned, onAddDup, onRe
         }
       });
       streamRef.current = stream;
-      // Show the overlay FIRST so the <video> element is in the DOM
       setCameraActive(true);
-      // Use setTimeout to let React render the video element before we touch it
-      setTimeout(() => {
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.play().catch(() => {});
-        }
+      setTimeout(async () => {
+        if (!videoRef.current) return;
+        videoRef.current.srcObject = stream;
+        await new Promise(resolve => {
+          if (videoRef.current.readyState >= 2) return resolve();
+          const onReady = () => {
+            videoRef.current.removeEventListener('loadedmetadata', onReady);
+            resolve();
+          };
+          videoRef.current.addEventListener('loadedmetadata', onReady);
+        });
+        try { await videoRef.current.play(); } catch (e) {}
       }, 50);
     } catch (error) {
       console.error('Camera error:', error);
-      setCameraError('Camera access was denied or is unavailable: ' + error.message);
+      setCameraError('Camera access was denied or is unavailable: ' + (error?.message || String(error)));
     }
   }
 
@@ -109,7 +114,7 @@ export default function CollectionPage({ stickers, onToggleOwned, onAddDup, onRe
       return;
     }
 
-    const match = normalized.match(/([A-Z]{3})\s+(\d{1,2})/);
+    const match = normalized.match(/([A-Z]{1,3})\s*(\d{1,2})/);
     if (match) {
       const code = `${match[1]} ${parseInt(match[2], 10)}`;
       const found = stickers.find(s => s.code.toUpperCase() === code);
@@ -157,21 +162,14 @@ export default function CollectionPage({ stickers, onToggleOwned, onAddDup, onRe
     if (!videoRef.current) return;
     const video = videoRef.current;
 
-    // Wait up to 3s for the video to have real dimensions (stream may take a moment)
-    if (video.videoWidth === 0 || video.videoHeight === 0) {
-      let waited = 0;
-      await new Promise(resolve => {
-        const check = setInterval(() => {
-          waited += 100;
-          if (video.videoWidth > 0 || waited >= 3000) {
-            clearInterval(check);
-            resolve();
-          }
-        }, 100);
-      });
+    let retries = 0;
+    while ((video.videoWidth === 0 || video.videoHeight === 0) && retries < 10) {
+      await new Promise(resolve => setTimeout(resolve, 150));
+      retries += 1;
     }
+
     if (video.videoWidth === 0 || video.videoHeight === 0) {
-      setCameraError('Camera not ready — point it at the sticker and try again.');
+      setCameraError('Camera feed is not ready yet. Please try again.');
       return;
     }
 
@@ -179,10 +177,7 @@ export default function CollectionPage({ stickers, onToggleOwned, onAddDup, onRe
     try {
       const fullW = video.videoWidth;
       const fullH = video.videoHeight;
-
-      // The sticker code (e.g. "ARG 2") is in the TOP ~30% of the sticker.
-      // Crop to that region so Tesseract ignores the noisy copyright text below.
-      const cropH = Math.floor(fullH * 0.30);
+      const cropH = Math.max(120, Math.floor(fullH * 0.30));
       const canvas = document.createElement('canvas');
       canvas.width  = fullW;
       canvas.height = cropH;
@@ -190,22 +185,23 @@ export default function CollectionPage({ stickers, onToggleOwned, onAddDup, onRe
       ctx.drawImage(video, 0, 0, fullW, cropH, 0, 0, fullW, cropH);
 
       const { createWorker } = await import('tesseract.js');
-      // Tesseract.js v4 API: language passed directly to createWorker
-      const worker = await createWorker('eng');
+      const worker = await createWorker();
+      await worker.load();
+      await worker.loadLanguage('eng');
+      await worker.initialize('eng');
       await worker.setParameters({
-        // Only recognise uppercase letters, digits and spaces — matches sticker codes
         tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ',
-        tessedit_pageseg_mode: '7', // treat image as a single text line
+        tessedit_pageseg_mode: '7',
       });
       const { data } = await worker.recognize(canvas);
       await worker.terminate();
 
-      const raw = data.text.trim();
+      const raw = (data.text || '').trim();
       setOcrStatus(`OCR: "${raw}"`);
       applyScanText(raw);
     } catch (error) {
       console.error('OCR error:', error);
-      setCameraError('Scan failed: ' + error.message + '. Try entering the code manually.');
+      setCameraError('Scan failed: ' + (error?.message || 'unknown error') + '. Try entering the code manually.');
     }
   }
 

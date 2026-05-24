@@ -122,6 +122,8 @@ export async function createChatRoomForProposal(proposal) {
     participantEmails: [p.fromEmail, p.toEmail].filter(Boolean),
     fromUid:           fromId,
     toUid:             toId,
+    readBy:            {},
+    closed:            false,
     lastMessage:       '',
     lastUpdated:       serverTimestamp(),
     createdAt:         serverTimestamp(),
@@ -166,11 +168,41 @@ export async function sendChatMessage(chatId, senderId, senderEmail, text) {
     senderEmail,
     text: text.trim(),
     createdAt: serverTimestamp(),
+    deliveredAt: serverTimestamp(),
   });
   await updateDoc(doc(db, 'chats', chatId), {
     lastMessage: text.trim(),
     lastUpdated: serverTimestamp(),
   });
+}
+
+export async function markChatAsRead(chatId, userId) {
+  if (!chatId || !userId) return;
+  await updateDoc(doc(db, 'chats', chatId), {
+    [`readBy.${userId}`]: serverTimestamp(),
+  });
+}
+
+export async function concludeTrade(chatId) {
+  if (!chatId) return null;
+  const chatRef = doc(db, 'chats', chatId);
+  const chatSnap = await getDoc(chatRef);
+  if (!chatSnap.exists()) return null;
+  const chat = chatSnap.data();
+  const updates = {
+    closed: true,
+    closedAt: serverTimestamp(),
+    lastMessage: 'Trade concluded',
+    lastUpdated: serverTimestamp(),
+  };
+  await updateDoc(chatRef, updates);
+  if (chat.tradeId) {
+    await updateDoc(doc(db, 'proposals', chat.tradeId), {
+      status: 'concluded',
+      concludedAt: serverTimestamp(),
+    });
+  }
+  return { id: chatId, ...chat, ...updates };
 }
 
 /** Upsert the current user's entry on the public trade board. */

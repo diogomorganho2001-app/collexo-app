@@ -11,6 +11,8 @@ import {
   loadChatRooms,
   loadChatMessages,
   sendChatMessage,
+  markChatAsRead,
+  concludeTrade,
   publishToBoard,
   fetchPublicBoard,
   loadAllTradeHistory,
@@ -533,14 +535,17 @@ function IncomingProposals({ stickers, onTradeAccepted }) {
 
   async function respond(propId, action, p) {
     const uid = auth.currentUser?.uid;
-    if (!uid) { alert('You must be signed in to respond.'); return; }
+    if (!uid) {
+      window.appToast?.('You must be signed in to respond.');
+      return;
+    }
 
     // Step 1: update proposal status
     try {
       await respondToProposal(propId, action);
     } catch (respErr) {
       console.error('Proposal update failed:', respErr);
-      alert(`Proposal update failed: ${respErr?.message || respErr}`);
+      window.appToast?.(`Proposal update failed: ${respErr?.message || respErr}`);
       return;
     }
 
@@ -549,16 +554,13 @@ function IncomingProposals({ stickers, onTradeAccepted }) {
       try {
         await createChatRoomForProposal(p);
         onTradeAccepted?.(p);
-        alert('✅ Trade accepted! Go to the Chats tab to coordinate.');
+        window.appToast?.('✅ Trade accepted! Go to the Chats tab to coordinate.');
       } catch (chatErr) {
         console.error('Chat room creation failed:', chatErr);
-        // Trade was accepted but chat failed — tell the user exactly why
-        alert(`Trade accepted ✅, but chat creation failed: ${chatErr?.message || chatErr}
-
-Check the browser console for details.`);
+        window.appToast?.(`Trade accepted ✅, but chat creation failed: ${chatErr?.message || String(chatErr)}`);
       }
     } else {
-      alert('Trade declined.');
+      window.appToast?.('Trade declined.');
     }
     load();
   }
@@ -596,7 +598,7 @@ Check the browser console for details.`);
                   await respond(p.id, 'accept', p);
                   setProposalError(null);
                 } catch (err) {
-                  alert('Retry failed: ' + err.message);
+                  window.appToast?.('Retry failed: ' + (err.message || String(err)));
                 }
               }}>Retry accept</button>
             </div>
@@ -615,7 +617,7 @@ Check the browser console for details.`);
                   setChatCreateError(null);
                   await load();
                 } catch (err) {
-                  alert('Retry failed: ' + err.message);
+                  window.appToast?.('Retry failed: ' + (err.message || String(err)));
                 }
               }}>Retry chat creation</button>
             </div>
@@ -677,6 +679,25 @@ function ChatTab() {
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [concluding, setConcluding] = useState(false);
+  const [concludeError, setConcludeError] = useState(null);
+
+  function getPartnerId(room) {
+    if (!room) return null;
+    if (room.participantIds) {
+      return room.participantIds.find(id => id !== auth.currentUser?.uid) || null;
+    }
+    if (room.fromUid && room.toUid) {
+      return room.fromUid === auth.currentUser?.uid ? room.toUid : room.fromUid;
+    }
+    return null;
+  }
+
+  function formatTimestamp(value) {
+    if (!value) return '';
+    const date = value.toDate ? value.toDate() : new Date(value);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
 
   async function loadRooms() {
     if (!auth.currentUser) return;
@@ -715,10 +736,25 @@ function ChatTab() {
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
   }, []);
-  useEffect(() => { loadMessagesForRoom(activeRoom); }, [activeRoom]);
+  useEffect(() => {
+    if (!activeRoom) {
+      setMessages([]);
+      return;
+    }
+    async function refreshRoom() {
+      await loadMessagesForRoom(activeRoom);
+      try {
+        await markChatAsRead(activeRoom.id, auth.currentUser.uid);
+        await loadRooms();
+      } catch (err) {
+        console.error('markChatAsRead failed:', err);
+      }
+    }
+    refreshRoom();
+  }, [activeRoom]);
 
   async function handleSend() {
-    if (!activeRoom || !newMessage.trim()) return;
+    if (!activeRoom || !newMessage.trim() || activeRoom.closed) return;
     setSending(true);
     try {
       await sendChatMessage(activeRoom.id, auth.currentUser.uid, auth.currentUser.email, newMessage);
@@ -729,6 +765,24 @@ function ChatTab() {
       console.error('Failed to send message', err);
     } finally {
       setSending(false);
+    }
+  }
+
+  async function handleConcludeTrade() {
+    if (!activeRoom) return;
+    setConcluding(true);
+    setConcludeError(null);
+    try {
+      await concludeTrade(activeRoom.id);
+      window.appToast?.('Trade concluded successfully.');
+      await loadRooms();
+      setActiveRoom(prev => prev ? { ...prev, closed: true } : prev);
+    } catch (err) {
+      console.error('Failed to conclude trade:', err);
+      setConcludeError(err.message || String(err));
+      window.appToast?.(`Failed to conclude trade: ${err.message || err}`);
+    } finally {
+      setConcluding(false);
     }
   }
 
@@ -797,34 +851,74 @@ function ChatTab() {
                 <div>
                   <div className="chat-thread-title">{roomLabel}</div>
                   <div className="chat-thread-meta">Trade ID: {activeRoom.tradeId}</div>
+                  {activeRoom.closed && (
+                    <div className="chat-concluded-banner">Trade concluded. Chat is now closed.</div>
+                  )}
                 </div>
+                {!activeRoom.closed && (
+                  <button
+                    className="btn-reject"
+                    onClick={handleConcludeTrade}
+                    disabled={concluding}
+                    style={{ alignSelf: 'center' }}
+                  >
+                    {concluding ? 'Concluding…' : 'Conclude trade'}
+                  </button>
+                )}
               </div>
               <div className="chat-messages">
                 {messages.length === 0 ? (
                   <div className="trade-empty">No messages yet. Send the first note.</div>
                 ) : (
-                  messages.map(msg => (
-                    <div
-                      key={msg.id}
-                      className={msg.senderId === auth.currentUser.uid ? 'chat-message mine' : 'chat-message'}
-                    >
-                      <div className="chat-message-body">{msg.text}</div>
-                      <div className="chat-message-meta">{msg.senderEmail}</div>
-                    </div>
-                  ))
+                  messages.map(msg => {
+                    const isMine = msg.senderId === auth.currentUser.uid;
+                    const partnerId = getPartnerId(activeRoom);
+                    const readByPartner = activeRoom?.readBy?.[partnerId]?.toMillis?.() ?? 0;
+                    const myReadAt = activeRoom?.readBy?.[auth.currentUser.uid]?.toMillis?.() ?? 0;
+                    const createdAt = msg.createdAt?.toMillis?.() ?? 0;
+                    const deliveredAt = msg.deliveredAt?.toMillis?.() ?? 0;
+                    let statusLabel = '';
+                    if (isMine) {
+                      if (readByPartner >= createdAt) {
+                        statusLabel = `Read ${formatTimestamp(activeRoom?.readBy?.[partnerId])}`;
+                      } else if (deliveredAt) {
+                        statusLabel = `Delivered ${formatTimestamp(msg.deliveredAt)}`;
+                      } else {
+                        statusLabel = 'Sent';
+                      }
+                    } else {
+                      statusLabel = myReadAt >= createdAt ? 'Read' : 'Received';
+                    }
+                    return (
+                      <div
+                        key={msg.id}
+                        className={isMine ? 'chat-message mine' : 'chat-message'}
+                      >
+                        <div className="chat-message-body">{msg.text}</div>
+                        <div className="chat-message-meta">
+                          {msg.senderEmail}
+                          <span className="chat-message-status">{statusLabel}</span>
+                        </div>
+                      </div>
+                    );
+                  })
                 )}
               </div>
               <div className="chat-input-row">
                 <textarea
                   value={newMessage}
                   onChange={e => setNewMessage(e.target.value)}
-                  placeholder="Write a message to coordinate the trade..."
+                  placeholder={activeRoom.closed ? 'This chat is closed.' : 'Write a message to coordinate the trade...'}
                   rows={3}
+                  disabled={activeRoom.closed}
                 />
-                <button className="btn-send-proposal" onClick={handleSend} disabled={sending || !newMessage.trim()}>
+                <button className="btn-send-proposal" onClick={handleSend} disabled={sending || !newMessage.trim() || activeRoom.closed}>
                   Send
                 </button>
               </div>
+              {concludeError && (
+                <div className="trade-status error" style={{ marginTop: 10 }}>{concludeError}</div>
+              )}
             </>
           )}
         </div>
@@ -999,6 +1093,8 @@ function HistoryTab() {
 /* ─────────────────────────────────────── */
 export default function TradePage({ stickers, tradeHistory, onTradeAccepted }) {
   const [activeTab, setActiveTab] = useState('find');
+  const [notifications, setNotifications] = useState({ proposals: 0, unreadChats: 0 });
+  const [notificationError, setNotificationError] = useState(null);
 
   const tabs = [
     { id: 'find',    label: 'Find'    },
@@ -1008,8 +1104,50 @@ export default function TradePage({ stickers, tradeHistory, onTradeAccepted }) {
     { id: 'history', label: 'History' },
   ];
 
+  async function refreshNotifications() {
+    if (!auth.currentUser) return;
+    setNotificationError(null);
+    try {
+      const [pending, rooms] = await Promise.all([
+        loadIncomingProposals(auth.currentUser.uid),
+        loadChatRooms(auth.currentUser.uid),
+      ]);
+      const unreadChats = rooms.filter(room => {
+        const readAt = room.readBy?.[auth.currentUser.uid]?.toMillis?.() ?? 0;
+        const updatedAt = room.lastUpdated?.toMillis?.() ?? room.lastUpdated ?? 0;
+        return updatedAt > readAt && !room.closed;
+      }).length;
+      setNotifications({ proposals: pending.length, unreadChats });
+    } catch (err) {
+      console.error('Notification refresh failed:', err);
+      setNotificationError(err.message || String(err));
+    }
+  }
+
+  useEffect(() => {
+    refreshNotifications();
+    const interval = window.setInterval(refreshNotifications, 15000);
+    return () => window.clearInterval(interval);
+  }, []);
+
   return (
     <section id="tradeCheckPage">
+      <div className="trade-notification-bar">
+        {notifications.proposals > 0 && (
+          <button className="trade-notice-chip" onClick={() => setActiveTab('inbox')}>
+            📩 {notifications.proposals} new proposal{notifications.proposals > 1 ? 's' : ''}
+          </button>
+        )}
+        {notifications.unreadChats > 0 && (
+          <button className="trade-notice-chip" onClick={() => setActiveTab('chat')}>
+            💬 {notifications.unreadChats} unread chat{notifications.unreadChats > 1 ? 's' : ''}
+          </button>
+        )}
+        {notificationError && (
+          <span className="trade-notice-error">Notification error: {notificationError}</span>
+        )}
+      </div>
+
       <div className="trade-tabs">
         {tabs.map(tab => (
           <button

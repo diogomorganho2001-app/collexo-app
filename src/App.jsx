@@ -26,6 +26,21 @@ export default function App() {
   const [toasts,       setToasts]       = useState([]);
   const [teamNavTarget, setTeamNavTarget] = useState('');
 
+  // Global app toast bridge for non-component modules
+  useEffect(() => {
+    function innerToast(event) {
+      const message = event.detail?.message || event.detail || '';
+      if (!message) return;
+      setToasts(prev => [...prev, message]);
+    }
+    window.addEventListener('app-toast', innerToast);
+    window.appToast = message => window.dispatchEvent(new CustomEvent('app-toast', { detail: { message } }));
+    return () => {
+      window.removeEventListener('app-toast', innerToast);
+      delete window.appToast;
+    };
+  }, []);
+
   // Load user data when auth resolves
   useEffect(() => {
     if (user) loadData(user.uid);
@@ -64,8 +79,8 @@ export default function App() {
 
   const handleAddDup = useCallback(async (code) => {
     const s = stickersRef.current.find(s => s.code === code);
-    if (!s?.owned) { alert('Own this sticker first.'); return; }
-    const next = stickersRef.current.map(s =>
+    if (!s?.owned) {
+      window.appToast?.('Own this sticker first.');
       s.code === code
         ? { ...s, dupCount: (s.dupCount || 0) + 1, duplicate: true }
         : s
