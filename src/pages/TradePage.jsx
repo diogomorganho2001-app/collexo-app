@@ -681,6 +681,9 @@ function ChatTab() {
   const [sending, setSending] = useState(false);
   const [concluding, setConcluding] = useState(false);
   const [concludeError, setConcludeError] = useState(null);
+  const [activeChatsOpen, setActiveChatsOpen] = useState(true);
+  const [concludedChatsOpen, setConcludedChatsOpen] = useState(false);
+  const messagesEndRef = useRef(null);
 
   function getPartnerId(room) {
     if (!room) return null;
@@ -706,9 +709,6 @@ function ChatTab() {
     try {
       const list = await loadChatRooms(auth.currentUser.uid);
       setRooms(list);
-      if (list.length && !activeRoom) {
-        setActiveRoom(list[0]);
-      }
     } catch (err) {
       console.error('loadChatRooms failed:', err);
       setRoomsError(err.message || String(err));
@@ -729,18 +729,15 @@ function ChatTab() {
     }
   }
 
-  // Reload every time the tab becomes visible so newly-created rooms appear
   useEffect(() => {
     loadRooms();
     const onFocus = () => loadRooms();
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
   }, []);
+
   useEffect(() => {
-    if (!activeRoom) {
-      setMessages([]);
-      return;
-    }
+    if (!activeRoom) { setMessages([]); return; }
     async function refreshRoom() {
       await loadMessagesForRoom(activeRoom);
       try {
@@ -751,18 +748,30 @@ function ChatTab() {
       }
     }
     refreshRoom();
-  }, [activeRoom]);
+  }, [activeRoom?.id]);
+
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages]);
 
   async function handleSend() {
-    if (!activeRoom || !newMessage.trim() || activeRoom.closed) return;
+    const text = newMessage.trim();
+    if (!activeRoom || !text || activeRoom.closed || sending) return;
     setSending(true);
     try {
-      await sendChatMessage(activeRoom.id, auth.currentUser.uid, auth.currentUser.email, newMessage);
+      await sendChatMessage(activeRoom.id, auth.currentUser.uid, auth.currentUser.email, text);
       setNewMessage('');
-      await loadMessagesForRoom(activeRoom);
-      await loadRooms();
+      const msgs = await loadChatMessages(activeRoom.id);
+      setMessages(msgs);
+      const list = await loadChatRooms(auth.currentUser.uid);
+      setRooms(list);
+      const fresh = list.find(r => r.id === activeRoom.id);
+      if (fresh) setActiveRoom(fresh);
     } catch (err) {
       console.error('Failed to send message', err);
+      window.appToast?.('Failed to send: ' + (err.message || String(err)));
     } finally {
       setSending(false);
     }
@@ -775,70 +784,99 @@ function ChatTab() {
     try {
       await concludeTrade(activeRoom.id);
       window.appToast?.('Trade concluded successfully.');
-      await loadRooms();
-      setActiveRoom(prev => prev ? { ...prev, closed: true } : prev);
+      const list = await loadChatRooms(auth.currentUser.uid);
+      setRooms(list);
+      const fresh = list.find(r => r.id === activeRoom.id);
+      setActiveRoom(fresh || { ...activeRoom, closed: true });
     } catch (err) {
       console.error('Failed to conclude trade:', err);
       setConcludeError(err.message || String(err));
-      window.appToast?.(`Failed to conclude trade: ${err.message || err}`);
     } finally {
       setConcluding(false);
     }
   }
 
   function getPartnerEmail(room) {
-    return room?.participantEmails?.find(email => email !== auth.currentUser.email) || room?.participantEmails?.[0] || 'Partner';
+    return room?.participantEmails?.find(e => e !== auth.currentUser?.email) || room?.participantEmails?.[0] || 'Partner';
   }
-
   function formatDisplayName(email) {
     if (!email) return 'Partner';
     return email.includes('@') ? email.split('@')[0] : email;
   }
-
   function formatRoomType(type) {
     if (type === 'interest') return 'Interest request';
     if (type === 'proposal') return 'Trade chat';
     return `${type ? type.charAt(0).toUpperCase() + type.slice(1) : 'Trade'} chat`;
   }
 
+  const activeRooms = (rooms || []).filter(r => !r.closed);
+  const concludedRooms = (rooms || []).filter(r => r.closed);
   const partnerEmail = getPartnerEmail(activeRoom);
   const partnerName = formatDisplayName(partnerEmail);
-  const roomLabel = activeRoom ? `${partnerName} · ${formatRoomType(activeRoom.tradeType)}` : '';
+  const roomLabel = activeRoom ? `${formatRoomType(activeRoom.tradeType)} \u00b7 ${partnerName}` : '';
+
+  function RoomItem({ room }) {
+    const pEmail = getPartnerEmail(room);
+    const pName = formatDisplayName(pEmail);
+    const rType = formatRoomType(room.tradeType);
+    const isSelected = activeRoom?.id === room.id;
+    return (
+      <button
+        type="button"
+        className={isSelected ? 'chat-room-item active' : 'chat-room-item'}
+        onClick={() => setActiveRoom(room)}
+      >
+        <div className="chat-room-title">{rType} \u00b7 {pName}</div>
+        <div className="chat-room-subtitle">{room.closed ? 'Trade concluded' : (room.lastMessage || 'No messages yet')}</div>
+      </button>
+    );
+  }
 
   return (
     <div className="trade-section">
       <div className="chat-layout">
         <div className="chat-rooms-panel">
-          <div className="section-title">Chats</div>
-          {loading && <div className="trade-empty">⏳ Loading chats…</div>}
+          {loading && <div className="trade-empty">\u23f3 Loading\u2026</div>}
           {!loading && roomsError && (
             <div className="trade-empty" style={{ color: 'var(--red)', fontSize: 12 }}>
-              Error loading chats: {roomsError}
+              Error: {roomsError}
               <br /><button className="btn-bulk" style={{ marginTop: 8 }} onClick={loadRooms}>Retry</button>
             </div>
           )}
-          {!loading && !roomsError && rooms?.length === 0 && (
-            <div className="trade-empty">No chats yet. Accept a trade to start one.</div>
-          )}
-          {!loading && rooms?.length > 0 && (
-            <div className="chat-room-list">
-              {rooms.map(room => {
-                const partnerEmail = getPartnerEmail(room);
-                const partnerName = formatDisplayName(partnerEmail);
-                const roomType = formatRoomType(room.tradeType);
-                return (
-                  <button
-                    key={room.id}
-                    type="button"
-                    className={activeRoom?.id === room.id ? 'chat-room-item active' : 'chat-room-item'}
-                    onClick={() => setActiveRoom(room)}
-                  >
-                    <div className="chat-room-title">{roomType} · {partnerName}</div>
-                    <div className="chat-room-subtitle">{room.lastMessage || 'No messages yet'}</div>
-                  </button>
-                );
-              })}
-            </div>
+          {!loading && !roomsError && (
+            <>
+              <button className="chat-section-toggle" onClick={() => setActiveChatsOpen(o => !o)}>
+                <span className="chat-section-toggle-label">
+                  <span className="chat-section-chevron">{activeChatsOpen ? '\u25be' : '\u25b8'}</span>
+                  Active
+                </span>
+                {activeRooms.length > 0 && <span className="chat-section-badge">{activeRooms.length}</span>}
+              </button>
+              {activeChatsOpen && (
+                <div className="chat-room-list">
+                  {activeRooms.length === 0
+                    ? <div className="chat-section-empty">No active chats</div>
+                    : activeRooms.map(room => <RoomItem key={room.id} room={room} />)
+                  }
+                </div>
+              )}
+
+              <button className="chat-section-toggle" onClick={() => setConcludedChatsOpen(o => !o)} style={{ marginTop: 4 }}>
+                <span className="chat-section-toggle-label">
+                  <span className="chat-section-chevron">{concludedChatsOpen ? '\u25be' : '\u25b8'}</span>
+                  Concluded
+                </span>
+                {concludedRooms.length > 0 && <span className="chat-section-badge concluded">{concludedRooms.length}</span>}
+              </button>
+              {concludedChatsOpen && (
+                <div className="chat-room-list">
+                  {concludedRooms.length === 0
+                    ? <div className="chat-section-empty">No concluded chats</div>
+                    : concludedRooms.map(room => <RoomItem key={room.id} room={room} />)
+                  }
+                </div>
+              )}
+            </>
           )}
         </div>
 
@@ -848,24 +886,31 @@ function ChatTab() {
           ) : (
             <>
               <div className="chat-thread-header">
-                <div>
+                <div style={{ flex: 1 }}>
                   <div className="chat-thread-title">{roomLabel}</div>
                   <div className="chat-thread-meta">Trade ID: {activeRoom.tradeId}</div>
-                  {activeRoom.closed && (
-                    <div className="chat-concluded-banner">Trade concluded. Chat is now closed.</div>
-                  )}
                 </div>
                 {!activeRoom.closed && (
                   <button
-                    className="btn-reject"
+                    className="btn-conclude-trade"
                     onClick={handleConcludeTrade}
                     disabled={concluding}
-                    style={{ alignSelf: 'center' }}
                   >
-                    {concluding ? 'Concluding…' : 'Conclude trade'}
+                    {concluding ? 'Concluding\u2026' : 'Conclude Trade'}
                   </button>
                 )}
               </div>
+
+              {activeRoom.closed && (
+                <div className="chat-concluded-banner">
+                  <div className="chat-concluded-icon">\u2713</div>
+                  <div className="chat-concluded-text">
+                    <span className="chat-concluded-title">Trade Concluded</span>
+                    <span className="chat-concluded-sub">This chat is now closed. No further messages can be sent.</span>
+                  </div>
+                </div>
+              )}
+
               <div className="chat-messages">
                 {messages.length === 0 ? (
                   <div className="trade-empty">No messages yet. Send the first note.</div>
@@ -879,21 +924,14 @@ function ChatTab() {
                     const deliveredAt = msg.deliveredAt?.toMillis?.() ?? 0;
                     let statusLabel = '';
                     if (isMine) {
-                      if (readByPartner >= createdAt) {
-                        statusLabel = `Read ${formatTimestamp(activeRoom?.readBy?.[partnerId])}`;
-                      } else if (deliveredAt) {
-                        statusLabel = `Delivered ${formatTimestamp(msg.deliveredAt)}`;
-                      } else {
-                        statusLabel = 'Sent';
-                      }
+                      if (readByPartner >= createdAt) statusLabel = `Read ${formatTimestamp(activeRoom?.readBy?.[partnerId])}`;
+                      else if (deliveredAt) statusLabel = `Delivered ${formatTimestamp(msg.deliveredAt)}`;
+                      else statusLabel = 'Sent';
                     } else {
                       statusLabel = myReadAt >= createdAt ? 'Read' : 'Received';
                     }
                     return (
-                      <div
-                        key={msg.id}
-                        className={isMine ? 'chat-message mine' : 'chat-message'}
-                      >
+                      <div key={msg.id} className={isMine ? 'chat-message mine' : 'chat-message'}>
                         <div className="chat-message-body">{msg.text}</div>
                         <div className="chat-message-meta">
                           {msg.senderEmail}
@@ -903,19 +941,28 @@ function ChatTab() {
                     );
                   })
                 )}
+                <div ref={messagesEndRef} />
               </div>
-              <div className="chat-input-row">
-                <textarea
-                  value={newMessage}
-                  onChange={e => setNewMessage(e.target.value)}
-                  placeholder={activeRoom.closed ? 'This chat is closed.' : 'Write a message to coordinate the trade...'}
-                  rows={3}
-                  disabled={activeRoom.closed}
-                />
-                <button className="btn-send-proposal" onClick={handleSend} disabled={sending || !newMessage.trim() || activeRoom.closed}>
-                  Send
-                </button>
-              </div>
+
+              {!activeRoom.closed && (
+                <div className="chat-input-row">
+                  <textarea
+                    value={newMessage}
+                    onChange={e => setNewMessage(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+                    placeholder="Write a message\u2026 (Enter to send, Shift+Enter for new line)"
+                    rows={3}
+                  />
+                  <button
+                    className="btn-send-proposal"
+                    onClick={handleSend}
+                    disabled={sending || !newMessage.trim()}
+                  >
+                    {sending ? 'Sending\u2026' : 'Send'}
+                  </button>
+                </div>
+              )}
+
               {concludeError && (
                 <div className="trade-status error" style={{ marginTop: 10 }}>{concludeError}</div>
               )}
@@ -927,9 +974,6 @@ function ChatTab() {
   );
 }
 
-/* ─────────────────────────────────────── */
-/*  BOARD sub-tab                          */
-/* ─────────────────────────────────────── */
 function BoardTab({ stickers }) {
   const [board, setBoard] = useState(null);
   const [publishMessage, setPublishMessage] = useState('');

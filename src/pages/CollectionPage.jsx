@@ -211,13 +211,32 @@ export default function CollectionPage({ stickers, onToggleOwned, onAddDup, onRe
       }
       ctx.putImageData(imgData, 0, 0);
 
-      // Tesseract.js v4 API: pass language to createWorker directly
-      const { createWorker } = await import('tesseract.js');
-      const worker = await createWorker('eng');
+      // Load Tesseract via global script tag to avoid MIME type issues with bundled workers
+      if (!window.Tesseract) {
+        await new Promise((resolve, reject) => {
+          const existing = document.getElementById('tesseract-cdn');
+          if (existing) { resolve(); return; }
+          const s = document.createElement('script');
+          s.id = 'tesseract-cdn';
+          s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js';
+          s.onload = resolve;
+          s.onerror = () => reject(new Error('Failed to load Tesseract.js from CDN'));
+          document.head.appendChild(s);
+          // Wait a tick for the script to initialise
+        });
+        // Give Tesseract a moment to register its global
+        await new Promise(r => setTimeout(r, 200));
+      }
+      const Tesseract = window.Tesseract;
+      if (!Tesseract || !Tesseract.createWorker) throw new Error('Tesseract not available');
+      const worker = await Tesseract.createWorker('eng', 1, {
+        workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/worker.min.js',
+        corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@4/tesseract-core.wasm.js',
+        langPath: 'https://tessdata.projectnaptha.com/4.0.0',
+        logger: () => {},
+      });
       await worker.setParameters({
-        // Allow letters, digits and space — matches all sticker code formats
         tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ',
-        // PSM 7 = single text line, PSM 6 = single block — try 6 for multi-char codes
         tessedit_pageseg_mode: '6',
       });
       const { data } = await worker.recognize(canvas);
