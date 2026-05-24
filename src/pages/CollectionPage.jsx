@@ -68,24 +68,21 @@ export default function CollectionPage({ stickers, onToggleOwned, onAddDup, onRe
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          facingMode: { ideal: 'environment' }, // back camera on mobile, falls back on desktop
+          facingMode: { ideal: 'environment' },
           width:  { ideal: 1280 },
           height: { ideal: 720 },
         }
       });
       streamRef.current = stream;
-      if (videoRef.current) {
-        const vid = videoRef.current;
-        vid.srcObject = stream;
-        vid.muted = true;
-        // Wait for metadata so videoWidth/videoHeight are available before capture
-        await new Promise(resolve => {
-          if (vid.readyState >= 1) { resolve(); return; }
-          vid.onloadedmetadata = resolve;
-        });
-        try { await vid.play(); } catch (e) {}
-      }
+      // Show the overlay FIRST so the <video> element is in the DOM
       setCameraActive(true);
+      // Use setTimeout to let React render the video element before we touch it
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play().catch(() => {});
+        }
+      }, 50);
     } catch (error) {
       console.error('Camera error:', error);
       setCameraError('Camera access was denied or is unavailable: ' + error.message);
@@ -160,9 +157,21 @@ export default function CollectionPage({ stickers, onToggleOwned, onAddDup, onRe
     if (!videoRef.current) return;
     const video = videoRef.current;
 
-    // Guard: if the stream hasn't started rendering yet, dimensions are 0
+    // Wait up to 3s for the video to have real dimensions (stream may take a moment)
     if (video.videoWidth === 0 || video.videoHeight === 0) {
-      setCameraError('Camera not ready yet — wait a moment and try again.');
+      let waited = 0;
+      await new Promise(resolve => {
+        const check = setInterval(() => {
+          waited += 100;
+          if (video.videoWidth > 0 || waited >= 3000) {
+            clearInterval(check);
+            resolve();
+          }
+        }, 100);
+      });
+    }
+    if (video.videoWidth === 0 || video.videoHeight === 0) {
+      setCameraError('Camera not ready — point it at the sticker and try again.');
       return;
     }
 
