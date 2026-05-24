@@ -671,6 +671,7 @@ Check the browser console for details.`);
 
 function ChatTab() {
   const [rooms, setRooms] = useState(null);
+  const [roomsError, setRoomsError] = useState(null);
   const [activeRoom, setActiveRoom] = useState(null);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
@@ -680,22 +681,24 @@ function ChatTab() {
   async function loadRooms() {
     if (!auth.currentUser) return;
     setLoading(true);
+    setRoomsError(null);
     try {
       const list = await loadChatRooms(auth.currentUser.uid);
       setRooms(list);
       if (list.length && !activeRoom) {
         setActiveRoom(list[0]);
       }
+    } catch (err) {
+      console.error('loadChatRooms failed:', err);
+      setRoomsError(err.message || String(err));
+      setRooms([]);
     } finally {
       setLoading(false);
     }
   }
 
   async function loadMessagesForRoom(room) {
-    if (!room) {
-      setMessages([]);
-      return;
-    }
+    if (!room) { setMessages([]); return; }
     try {
       const msgs = await loadChatMessages(room.id);
       setMessages(msgs);
@@ -705,7 +708,13 @@ function ChatTab() {
     }
   }
 
-  useEffect(() => { loadRooms(); }, []);
+  // Reload every time the tab becomes visible so newly-created rooms appear
+  useEffect(() => {
+    loadRooms();
+    const onFocus = () => loadRooms();
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, []);
   useEffect(() => { loadMessagesForRoom(activeRoom); }, [activeRoom]);
 
   async function handleSend() {
@@ -747,9 +756,15 @@ function ChatTab() {
       <div className="chat-layout">
         <div className="chat-rooms-panel">
           <div className="section-title">Chats</div>
-          {loading && <div className="trade-empty">Loading chats…</div>}
-          {!loading && rooms?.length === 0 && (
-            <div className="trade-empty">No active chats yet. Accept a trade to start a conversation.</div>
+          {loading && <div className="trade-empty">⏳ Loading chats…</div>}
+          {!loading && roomsError && (
+            <div className="trade-empty" style={{ color: 'var(--red)', fontSize: 12 }}>
+              Error loading chats: {roomsError}
+              <br /><button className="btn-bulk" style={{ marginTop: 8 }} onClick={loadRooms}>Retry</button>
+            </div>
+          )}
+          {!loading && !roomsError && rooms?.length === 0 && (
+            <div className="trade-empty">No chats yet. Accept a trade to start one.</div>
           )}
           {!loading && rooms?.length > 0 && (
             <div className="chat-room-list">

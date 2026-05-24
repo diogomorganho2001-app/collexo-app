@@ -133,13 +133,21 @@ export async function createChatRoomForProposal(proposal) {
 }
 
 export async function loadChatRooms(userId) {
+  // NOTE: combining array-contains with orderBy requires a composite Firestore index.
+  // To avoid that dependency we fetch without orderBy and sort client-side.
   const q = query(
     collection(db, 'chats'),
-    where('participantIds', 'array-contains', userId),
-    orderBy('lastUpdated', 'desc')
+    where('participantIds', 'array-contains', userId)
   );
   const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const rooms = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  // Sort newest-first by lastUpdated (Firestore Timestamp or millis)
+  rooms.sort((a, b) => {
+    const ta = a.lastUpdated?.toMillis?.() ?? a.lastUpdated ?? 0;
+    const tb = b.lastUpdated?.toMillis?.() ?? b.lastUpdated ?? 0;
+    return tb - ta;
+  });
+  return rooms;
 }
 
 export async function loadChatMessages(chatId) {
