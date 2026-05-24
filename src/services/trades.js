@@ -264,18 +264,18 @@ export async function getUserCollection(email) {
 /** Load all trade history (both sent and received proposals). */
 export async function loadAllTradeHistory(userId) {
   try {
-    // Get sent proposals that were accepted or rejected
+    // Get sent proposals that were accepted, concluded, or rejected
     const sentQ = query(
       collection(db, 'proposals'),
       where('fromUserId', '==', userId),
-      where('status', 'in', ['accepted', 'rejected'])
+      where('status', 'in', ['accepted', 'rejected', 'concluded'])
     );
     
-    // Get received proposals that were accepted or rejected
+    // Get received proposals that were accepted, concluded, or rejected
     const receivedQ = query(
       collection(db, 'proposals'),
       where('toUserId', '==', userId),
-      where('status', 'in', ['accepted', 'rejected'])
+      where('status', 'in', ['accepted', 'rejected', 'concluded'])
     );
     
     const [sentSnap, receivedSnap] = await Promise.all([
@@ -287,12 +287,14 @@ export async function loadAllTradeHistory(userId) {
       ...sentSnap.docs.map(d => ({
         ...d.data(),
         direction: 'sent',
-        timestamp: d.data().createdAt?.toMillis?.() || 0
+        state: d.data().status === 'accepted' ? 'ongoing' : d.data().status || 'unknown',
+        timestamp: d.data().concludedAt?.toMillis?.() ?? d.data().createdAt?.toMillis?.() || 0
       })),
       ...receivedSnap.docs.map(d => ({
         ...d.data(),
         direction: 'received',
-        timestamp: d.data().createdAt?.toMillis?.() || 0
+        state: d.data().status === 'accepted' ? 'ongoing' : d.data().status || 'unknown',
+        timestamp: d.data().concludedAt?.toMillis?.() ?? d.data().createdAt?.toMillis?.() || 0
       }))
     ];
     

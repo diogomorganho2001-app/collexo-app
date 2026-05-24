@@ -903,11 +903,8 @@ function ChatTab() {
 
               {activeRoom.closed && (
                 <div className="chat-concluded-banner">
-                  <div className="chat-concluded-icon">\u2713</div>
-                  <div className="chat-concluded-text">
-                    <span className="chat-concluded-title">Trade Concluded</span>
-                    <span className="chat-concluded-sub">This chat is now closed. No further messages can be sent.</span>
-                  </div>
+                  <span className="chat-concluded-title">✓ Trade concluded.</span>
+                  <span className="chat-concluded-sub">This chat is now closed.</span>
                 </div>
               )}
 
@@ -1074,6 +1071,7 @@ function BoardTab({ stickers }) {
 /* ─────────────────────────────────────── */
 function HistoryTab() {
   const [allTrades, setAllTrades] = useState(null);
+  const [filterState, setFilterState] = useState('concluded');
 
   async function loadHistory() {
     if (!auth.currentUser) return;
@@ -1089,16 +1087,43 @@ function HistoryTab() {
   useEffect(() => { loadHistory(); }, []);
 
   const trades = allTrades !== null ? allTrades : [];
+  const filteredTrades = trades.filter(t =>
+    filterState === 'all' || t.state === filterState
+  );
+
+  function renderStateLabel(state) {
+    if (state === 'ongoing') return '⏳ Ongoing';
+    if (state === 'concluded') return '✅ Concluded';
+    if (state === 'rejected') return '❌ Declined';
+    return state;
+  }
 
   return (
     <div className="trade-section">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+        <h3 style={{ margin: 0 }}>Trade history</h3>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <label htmlFor="trade-state-filter" style={{ fontSize: 13, color: 'var(--text3)' }}>Filter:</label>
+          <select
+            id="trade-state-filter"
+            value={filterState}
+            onChange={e => setFilterState(e.target.value)}
+            style={{ padding: '8px 10px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)' }}
+          >
+            <option value="all">All states</option>
+            <option value="ongoing">Ongoing</option>
+            <option value="concluded">Concluded</option>
+            <option value="rejected">Declined</option>
+          </select>
+        </div>
+      </div>
       <div className="trade-history-list">
         {allTrades === null ? (
           <div className="trade-empty"><span className="te-icon">⏳</span>Loading…</div>
-        ) : trades.length === 0 ? (
-          <div className="trade-empty"><span className="te-icon">📜</span>No completed trades yet</div>
+        ) : filteredTrades.length === 0 ? (
+          <div className="trade-empty"><span className="te-icon">📜</span>No trades match this filter</div>
         ) : (
-          trades.map((t, i) => (
+          filteredTrades.map((t, i) => (
             <div key={i} className="trade-history-card">
               <div className="th-header">
                 <span className="th-partner">
@@ -1106,7 +1131,7 @@ function HistoryTab() {
                   {t.direction === 'sent' ? t.toEmail : t.fromEmail}
                 </span>
                 <span className="th-date" style={{ fontSize: 12 }}>
-                  {t.status === 'accepted' ? '✅ Accepted' : '❌ Declined'}
+                  {renderStateLabel(t.state)}
                 </span>
               </div>
               <div className="th-swap">
