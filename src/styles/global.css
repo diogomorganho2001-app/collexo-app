@@ -840,6 +840,63 @@ body.light-mode .hero-grid-bg {
 .collection-controls input  { flex: 1; min-width: 140px; }
 .collection-controls select { width: auto; flex-shrink: 0; }
 
+.scan-group {
+  display: flex;
+  gap: 8px;
+  min-width: 240px;
+  flex-shrink: 0;
+}
+
+.scan-group input {
+  flex: 1;
+  min-width: 120px;
+}
+
+.scan-feedback {
+  padding: 0 18px 10px;
+  color: var(--text2);
+  font-size: 12px;
+}
+
+.camera-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 999;
+}
+
+.camera-panel {
+  width: min(100%, 520px);
+  background: var(--card);
+  border: 1px solid var(--border2);
+  border-radius: var(--r);
+  padding: 16px;
+  box-shadow: 0 24px 60px rgba(0,0,0,.35);
+}
+
+.camera-video {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 5;
+  background: #000;
+  border-radius: 16px;
+  margin-bottom: 12px;
+}
+
+.camera-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.camera-actions button {
+  flex: 1;
+}
+
 .bulk-actions-bar {
   display: flex;
   gap: 8px;
