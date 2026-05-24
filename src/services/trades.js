@@ -3,6 +3,7 @@ import {
   query,
   where,
   getDocs,
+  getDoc,
   addDoc,
   updateDoc,
   doc,
@@ -91,8 +92,20 @@ export async function createChatRoomForProposal(proposal) {
     createdAt: serverTimestamp(),
   };
 
-  const roomRef = await addDoc(collection(db, 'chats'), room);
-  return { id: roomRef.id, ...room };
+  // Retry creating the chat room a few times in case of transient errors
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const roomRef = await addDoc(collection(db, 'chats'), room);
+      return { id: roomRef.id, ...room };
+    } catch (err) {
+      // If last attempt, rethrow so caller can handle/log
+      if (attempt === maxAttempts) throw err;
+      // small exponential backoff
+      await new Promise(r => setTimeout(r, 300 * attempt));
+    }
+  }
+  return null;
 }
 
 export async function loadChatRooms(userId) {
@@ -226,4 +239,11 @@ export async function loadAllTradeHistory(userId) {
     console.error('Error loading trade history:', err);
     return [];
   }
+}
+
+/** Get a single proposal by id */
+export async function getProposalById(proposalId) {
+  const d = await getDoc(doc(db, 'proposals', proposalId));
+  if (!d.exists()) return null;
+  return { id: d.id, ...d.data() };
 }

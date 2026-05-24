@@ -56,6 +56,10 @@ export default function CollectionPage({ stickers, onToggleOwned, onAddDup, onRe
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
     }
+    if (videoRef.current) {
+      try { videoRef.current.pause(); } catch (e) {}
+      try { videoRef.current.srcObject = null; } catch (e) {}
+    }
   }
 
   async function openCamera() {
@@ -66,6 +70,7 @@ export default function CollectionPage({ stickers, onToggleOwned, onAddDup, onRe
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        try { await videoRef.current.play(); } catch (e) {}
       }
       setCameraActive(true);
     } catch (error) {
@@ -113,13 +118,28 @@ export default function CollectionPage({ stickers, onToggleOwned, onAddDup, onRe
     setScanFeedback(`Could not identify sticker from “${normalized}”. Use code like ALG 1 or try a clearer photo.`);
   }
 
-  async function handleScanCode() {
+  async function handleScanAction() {
+    // If user typed a code, treat that as the scan action
     const code = scanCode.trim().toUpperCase();
-    if (!code) {
-      setScanFeedback('Enter a sticker code to scan.');
+    if (code) {
+      applyScanText(code);
       return;
     }
-    applyScanText(code);
+
+    // Otherwise, use the camera: if closed -> open, if open -> capture
+    if (!cameraActive) {
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        await openCamera();
+      } else {
+        setCameraError('Camera not available on this device.');
+      }
+      return;
+    }
+
+    // camera is active -> capture frame
+    await captureFrame();
+    // stop camera after capture to avoid lingering black screens
+    stopCamera();
   }
 
   async function captureFrame() {
@@ -185,9 +205,8 @@ export default function CollectionPage({ stickers, onToggleOwned, onAddDup, onRe
             value={scanCode}
             onChange={e => setScanCode(e.target.value)}
           />
-          <button className="btn-bulk" onClick={handleScanCode}>Scan</button>
+          <button className="btn-bulk" onClick={handleScanAction}>{cameraActive ? 'Capture' : 'Scan'}</button>
         </div>
-        <button className="btn-bulk" onClick={openCamera}>📷 Camera</button>
         <button
           className="btn-bulk"
           style={{ background: bulkMode ? 'rgba(240,180,41,.3)' : 'rgba(240,180,41,.1)' }}

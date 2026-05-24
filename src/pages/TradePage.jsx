@@ -5,6 +5,7 @@ import {
   getUserCollection,
   sendProposal,
   loadIncomingProposals,
+  getProposalById,
   respondToProposal,
   createChatRoomForProposal,
   loadChatRooms,
@@ -515,6 +516,7 @@ function FindTab({ stickers }) {
 /* ─────────────────────────────────────── */
 function IncomingProposals({ stickers, onTradeAccepted }) {
   const [proposals, setProposals] = useState(null);
+  const [chatCreateError, setChatCreateError] = useState(null);
 
   async function load() {
     if (!auth.currentUser) return;
@@ -530,16 +532,38 @@ function IncomingProposals({ stickers, onTradeAccepted }) {
 
   async function respond(propId, action, p) {
     try {
+      // Fetch the latest proposal document to verify current user is allowed to update
+      const remote = await getProposalById(propId);
+      if (!remote) {
+        alert('Proposal not found.');
+        return;
+      }
+      const uid = auth.currentUser?.uid;
+      if (!uid) {
+        alert('You must be signed in to respond.');
+        return;
+      }
+      if (remote.toUserId !== uid && remote.toUid !== uid) {
+        alert('You are not authorized to respond to this proposal.');
+        return;
+      }
+
       await respondToProposal(propId, action);
       if (action === 'accept') {
-        await createChatRoomForProposal(p);
+        try {
+          await createChatRoomForProposal(p);
+        } catch (chatErr) {
+          console.error('Failed creating chat room', chatErr);
+          setChatCreateError({ proposalId: propId, message: chatErr?.message || 'Failed to create chat room' });
+        }
         onTradeAccepted?.(p);
-        alert('✅ Trade accepted! A private chat room is now available.');
+        alert('✅ Trade accepted! A private chat room may be available.');
       } else {
         alert('Trade declined.');
       }
       load();
     } catch (e) {
+      console.error(e);
       alert('Error: ' + e.message);
     }
   }
@@ -565,6 +589,25 @@ function IncomingProposals({ stickers, onTradeAccepted }) {
         </div>
       </div>
       <div className="proposals-list">
+        {chatCreateError && (
+          <div className="proposal-error-card">
+            <strong>Chat creation failed:</strong> {chatCreateError.message}
+            <div style={{ marginTop: 8 }}>
+              <button className="btn-bulk" onClick={async () => {
+                // retry once from UI
+                try {
+                  const p = proposals.find(x => x.id === chatCreateError.proposalId);
+                  if (!p) throw new Error('Proposal not found');
+                  await createChatRoomForProposal(p);
+                  setChatCreateError(null);
+                  await load();
+                } catch (err) {
+                  alert('Retry failed: ' + err.message);
+                }
+              }}>Retry chat creation</button>
+            </div>
+          </div>
+        )}
         {proposals.length === 0 ? (
           <div className="trade-empty"><span className="te-icon">✉️</span>No incoming proposals</div>
         ) : (
