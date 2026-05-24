@@ -66,24 +66,29 @@ export default function CollectionPage({ stickers, onToggleOwned, onAddDup, onRe
     setCameraError('');
     setOcrStatus('');
     try {
-      // Force back camera; ideal so it falls back gracefully on desktop
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          facingMode: { ideal: 'environment' },
+          facingMode: { ideal: 'environment' }, // back camera on mobile, falls back on desktop
           width:  { ideal: 1280 },
           height: { ideal: 720 },
         }
       });
       streamRef.current = stream;
       if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.setAttribute('playsinline', ''); // iOS Safari
-        videoRef.current.muted = true;
-        try { await videoRef.current.play(); } catch (e) {}
+        const vid = videoRef.current;
+        vid.srcObject = stream;
+        vid.muted = true;
+        // Wait for metadata so videoWidth/videoHeight are available before capture
+        await new Promise(resolve => {
+          if (vid.readyState >= 1) { resolve(); return; }
+          vid.onloadedmetadata = resolve;
+        });
+        try { await vid.play(); } catch (e) {}
       }
       setCameraActive(true);
     } catch (error) {
-      setCameraError('Camera access was denied or is unavailable.');
+      console.error('Camera error:', error);
+      setCameraError('Camera access was denied or is unavailable: ' + error.message);
     }
   }
 
@@ -153,34 +158,45 @@ export default function CollectionPage({ stickers, onToggleOwned, onAddDup, onRe
 
   async function captureFrame() {
     if (!videoRef.current) return;
-    setOcrStatus('Scanning image…');
+    const video = videoRef.current;
+
+    // Guard: if the stream hasn't started rendering yet, dimensions are 0
+    if (video.videoWidth === 0 || video.videoHeight === 0) {
+      setCameraError('Camera not ready yet — wait a moment and try again.');
+      return;
+    }
+
+    setOcrStatus('Scanning…');
     try {
-      const video = videoRef.current;
       const fullW = video.videoWidth;
       const fullH = video.videoHeight;
-      // The sticker code (e.g. ARG 2) is in the TOP ~28% of the sticker.
-      // Crop to that region so Tesseract isn't confused by the noisy bottom text.
-      const cropH = Math.floor(fullH * 0.28);
+
+      // The sticker code (e.g. "ARG 2") is in the TOP ~30% of the sticker.
+      // Crop to that region so Tesseract ignores the noisy copyright text below.
+      const cropH = Math.floor(fullH * 0.30);
       const canvas = document.createElement('canvas');
       canvas.width  = fullW;
       canvas.height = cropH;
       const ctx = canvas.getContext('2d');
-      // Draw only the top 28% of the video frame
       ctx.drawImage(video, 0, 0, fullW, cropH, 0, 0, fullW, cropH);
+
       const { createWorker } = await import('tesseract.js');
-      // Tesseract.js v4+ API: pass language directly to createWorker
+      // Tesseract.js v4 API: language passed directly to createWorker
       const worker = await createWorker('eng');
-      // Whitelist only uppercase letters, digits and space to reduce false reads
       await worker.setParameters({
+        // Only recognise uppercase letters, digits and spaces — matches sticker codes
         tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ',
+        tessedit_pageseg_mode: '7', // treat image as a single text line
       });
       const { data } = await worker.recognize(canvas);
       await worker.terminate();
-      setOcrStatus(`OCR result: ${data.text.trim()}`);
-      applyScanText(data.text);
+
+      const raw = data.text.trim();
+      setOcrStatus(`OCR: "${raw}"`);
+      applyScanText(raw);
     } catch (error) {
-      console.error(error);
-      setCameraError('Image scan failed. Try again or enter the code manually.');
+      console.error('OCR error:', error);
+      setCameraError('Scan failed: ' + error.message + '. Try entering the code manually.');
     }
   }
 
@@ -244,7 +260,7 @@ export default function CollectionPage({ stickers, onToggleOwned, onAddDup, onRe
       {cameraActive && (
         <div className="camera-overlay">
           <div className="camera-panel">
-            <video ref={videoRef} autoPlay muted playsInline className="camera-video" />
+            <video ref={videoRef} autoPlay muted playsInline webkit-playsinline="true" className="camera-video" style={{ width: '100%', maxHeight: 320, background: '#000', display: 'block' }} />
             <div className="camera-actions">
               <button className="btn-bulk" onClick={captureFrame}>Capture</button>
               <button className="btn-bulk-cancel" onClick={stopCamera}>Close</button>

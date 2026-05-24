@@ -77,52 +77,57 @@ export async function respondToProposal(propId, action) {
 
 /** Create or return an existing chat room for an accepted proposal. */
 export async function createChatRoomForProposal(proposal) {
-  if (!proposal || !proposal.id) return null;
+  if (!proposal || !proposal.id) throw new Error('No proposal ID provided');
 
-  // Always re-fetch the proposal from Firestore so we have fresh, complete data.
-  // The locally-cached object may have missing fromUid/toUid fields if it was
-  // created with fromUserId/toUserId, which would make participantIds empty.
+  // Re-fetch the proposal so we always have the full, fresh document.
   const freshSnap = await getDoc(doc(db, 'proposals', proposal.id));
-  const p = freshSnap.exists() ? { id: freshSnap.id, ...freshSnap.data() } : proposal;
+  if (!freshSnap.exists()) throw new Error('Proposal document not found in Firestore');
+  const p = { id: freshSnap.id, ...freshSnap.data() };
 
-  // Build participantIds from whichever pair of fields is populated
+  // Resolve IDs — proposals store both fromUid/fromUserId; accept either.
   const fromId = p.fromUid || p.fromUserId || null;
   const toId   = p.toUid   || p.toUserId   || null;
-  const participantIds = [fromId, toId].filter(Boolean);
 
-  if (participantIds.length < 2) {
-    throw new Error(`Cannot create chat: missing participant IDs (from=${fromId}, to=${toId})`);
+  if (!fromId || !toId) {
+    throw new Error(`Missing participant IDs on proposal: fromId=${fromId}, toId=${toId}`);
   }
 
-  // Check if a chat room already exists for this trade.
-  // We query only documents where the current user is a participant so the
-  // Firestore read rule (uid in participantIds) is satisfied.
+  const participantIds = [fromId, toId];
+
+  // Check whether the room already exists. Use toId (the accepter / current user)
+  // in array-contains so the Firestore read rule is satisfied.
+  const { auth: firebaseAuth } = await import('./firebase.js');
+  const currentUid = firebaseAuth.currentUser?.uid;
+  const queryUid = currentUid || toId;
+
   try {
-    const chatQuery = query(
+    const existQ = query(
       collection(db, 'chats'),
       where('tradeId', '==', p.id),
-      where('participantIds', 'array-contains', fromId)
+      where('participantIds', 'array-contains', queryUid)
     );
-    const chatSnap = await getDocs(chatQuery);
-    if (!chatSnap.empty) {
-      return { id: chatSnap.docs[0].id, ...chatSnap.docs[0].data() };
+    const existSnap = await getDocs(existQ);
+    if (!existSnap.empty) {
+      return { id: existSnap.docs[0].id, ...existSnap.docs[0].data() };
     }
-  } catch (_) {
-    // If the query fails (e.g. no docs yet), fall through and create the room
+  } catch (checkErr) {
+    // Log but don't swallow — if it's a real permissions error we'll surface it below
+    console.warn('Chat existence check failed, attempting create anyway:', checkErr.message);
   }
 
   const room = {
-    tradeId: p.id,
-    tradeType: p.requestType || 'proposal',
+    tradeId:           String(p.id),
+    tradeType:         p.requestType || 'proposal',
     participantIds,
     participantEmails: [p.fromEmail, p.toEmail].filter(Boolean),
-    fromUid: fromId,
-    toUid:   toId,
-    lastMessage: '',
-    lastUpdated: serverTimestamp(),
-    createdAt: serverTimestamp(),
+    fromUid:           fromId,
+    toUid:             toId,
+    lastMessage:       '',
+    lastUpdated:       serverTimestamp(),
+    createdAt:         serverTimestamp(),
   };
 
+  // This will throw with the real Firestore error if rules block it.
   const roomRef = await addDoc(collection(db, 'chats'), room);
   return { id: roomRef.id, ...room };
 }

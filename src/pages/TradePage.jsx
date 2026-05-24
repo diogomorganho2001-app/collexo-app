@@ -532,49 +532,35 @@ function IncomingProposals({ stickers, onTradeAccepted }) {
   useEffect(() => { load(); }, []);
 
   async function respond(propId, action, p) {
+    const uid = auth.currentUser?.uid;
+    if (!uid) { alert('You must be signed in to respond.'); return; }
+
+    // Step 1: update proposal status
     try {
-      // Fetch the latest proposal document to verify current user is allowed to update
-      const remote = await getProposalById(propId);
-      if (!remote) {
-        alert('Proposal not found.');
-        return;
-      }
-      const uid = auth.currentUser?.uid;
-      if (!uid) {
-        alert('You must be signed in to respond.');
-        return;
-      }
-      if (remote.toUserId !== uid && remote.toUid !== uid) {
-        alert('You are not authorized to respond to this proposal.');
-        return;
-      }
-
-      try {
-        await respondToProposal(propId, action);
-      } catch (respErr) {
-        console.error('Proposal update failed', respErr);
-        setProposalError({ proposalId: propId, message: respErr?.message || 'Failed to update proposal', code: respErr?.code });
-        // stop here - permission error likely originates from rules
-        return;
-      }
-
-      if (action === 'accept') {
-        try {
-          await createChatRoomForProposal(p);
-        } catch (chatErr) {
-          console.error('Failed creating chat room', chatErr);
-          setChatCreateError({ proposalId: propId, message: chatErr?.message || 'Failed to create chat room', code: chatErr?.code });
-        }
-        onTradeAccepted?.(p);
-        alert('✅ Trade accepted! A private chat room may be available.');
-      } else {
-        alert('Trade declined.');
-      }
-      load();
-    } catch (e) {
-      console.error(e);
-      alert('Error: ' + e.message);
+      await respondToProposal(propId, action);
+    } catch (respErr) {
+      console.error('Proposal update failed:', respErr);
+      alert(`Proposal update failed: ${respErr?.message || respErr}`);
+      return;
     }
+
+    // Step 2: if accepted, create the chat room
+    if (action === 'accept') {
+      try {
+        await createChatRoomForProposal(p);
+        onTradeAccepted?.(p);
+        alert('✅ Trade accepted! Go to the Chats tab to coordinate.');
+      } catch (chatErr) {
+        console.error('Chat room creation failed:', chatErr);
+        // Trade was accepted but chat failed — tell the user exactly why
+        alert(`Trade accepted ✅, but chat creation failed: ${chatErr?.message || chatErr}
+
+Check the browser console for details.`);
+      }
+    } else {
+      alert('Trade declined.');
+    }
+    load();
   }
 
   if (proposals === null) return <div className="trade-empty"><span className="te-icon">⏳</span>Loading…</div>;
