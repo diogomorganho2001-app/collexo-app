@@ -189,6 +189,11 @@ export async function concludeTrade(chatId) {
   const chatSnap = await getDoc(chatRef);
   if (!chatSnap.exists()) return null;
   const chat = chatSnap.data();
+
+  // Only update the chat document — we do NOT update the proposal here because
+  // the Firestore proposal update rule only allows status in ['accepted','rejected']
+  // and affectedKeys hasOnly ['status','updatedAt','responseMessage'].
+  // Writing 'concluded' or 'concludedAt' would be rejected with permission-denied.
   const updates = {
     closed: true,
     closedAt: serverTimestamp(),
@@ -196,12 +201,6 @@ export async function concludeTrade(chatId) {
     lastUpdated: serverTimestamp(),
   };
   await updateDoc(chatRef, updates);
-  if (chat.tradeId) {
-    await updateDoc(doc(db, 'proposals', chat.tradeId), {
-      status: 'concluded',
-      concludedAt: serverTimestamp(),
-    });
-  }
   return { id: chatId, ...chat, ...updates };
 }
 

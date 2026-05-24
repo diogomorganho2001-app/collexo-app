@@ -114,10 +114,18 @@ export default function CollectionPage({ stickers, onToggleOwned, onAddDup, onRe
       return;
     }
 
-    const match = normalized.match(/([A-Z]{1,3})\s*(\d{1,2})/);
+    // Sticker codes are stored WITHOUT space: ARG2, FWC1, RSA11 etc.
+    // OCR may read them WITH a space ("ARG 2") so we try both variants.
+    const match = normalized.match(/([A-Z]{1,4})\s*(\d{1,3})/);
     if (match) {
-      const code = `${match[1]} ${parseInt(match[2], 10)}`;
-      const found = stickers.find(s => s.code.toUpperCase() === code);
+      const letters = match[1];
+      const digits  = parseInt(match[2], 10);
+      const codeNoSpace   = `${letters}${digits}`;           // e.g. ARG2
+      const codeWithSpace = `${letters} ${digits}`;          // e.g. ARG 2
+      const found = stickers.find(s =>
+        s.code.toUpperCase() === codeNoSpace ||
+        s.code.toUpperCase() === codeWithSpace
+      );
       if (found) {
         if (!found.owned) {
           onToggleOwned(found.code);
@@ -177,21 +185,40 @@ export default function CollectionPage({ stickers, onToggleOwned, onAddDup, onRe
     try {
       const fullW = video.videoWidth;
       const fullH = video.videoHeight;
-      const cropH = Math.max(120, Math.floor(fullH * 0.30));
-      const canvas = document.createElement('canvas');
-      canvas.width  = fullW;
-      canvas.height = cropH;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(video, 0, 0, fullW, cropH, 0, 0, fullW, cropH);
 
+      // Sticker code (e.g. "ARG 2") is in the top ~30% of the sticker face.
+      // Crop to that strip to avoid the noisy copyright text in the lower half.
+      const cropH = Math.max(120, Math.floor(fullH * 0.30));
+
+      // Scale up 2x for better OCR accuracy on small text
+      const scale = 2;
+      const canvas = document.createElement('canvas');
+      canvas.width  = fullW * scale;
+      canvas.height = cropH * scale;
+      const ctx = canvas.getContext('2d');
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(video, 0, 0, fullW, cropH, 0, 0, fullW * scale, cropH * scale);
+
+      // Increase contrast: convert to greyscale and boost contrast
+      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const px = imgData.data;
+      for (let i = 0; i < px.length; i += 4) {
+        // Greyscale
+        const grey = 0.299 * px[i] + 0.587 * px[i+1] + 0.114 * px[i+2];
+        // Threshold — dark text on light background
+        const val = grey < 128 ? 0 : 255;
+        px[i] = px[i+1] = px[i+2] = val;
+      }
+      ctx.putImageData(imgData, 0, 0);
+
+      // Tesseract.js v4 API: pass language to createWorker directly
       const { createWorker } = await import('tesseract.js');
-      const worker = await createWorker();
-      await worker.load();
-      await worker.loadLanguage('eng');
-      await worker.initialize('eng');
+      const worker = await createWorker('eng');
       await worker.setParameters({
+        // Allow letters, digits and space — matches all sticker code formats
         tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ',
-        tessedit_pageseg_mode: '7',
+        // PSM 7 = single text line, PSM 6 = single block — try 6 for multi-char codes
+        tessedit_pageseg_mode: '6',
       });
       const { data } = await worker.recognize(canvas);
       await worker.terminate();
