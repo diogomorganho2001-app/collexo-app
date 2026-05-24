@@ -64,10 +64,14 @@ export async function loadIncomingProposals(toUserId) {
   return results;
 }
 
-/** Accept or reject a proposal by ID. */
+/** Accept or reject a proposal by ID.
+ *  Must send exactly { status, updatedAt } to satisfy Firestore rules:
+ *  keys().hasOnly(['status','updatedAt','responseMessage'])
+ */
 export async function respondToProposal(propId, action) {
   await updateDoc(doc(db, 'proposals', propId), {
     status: action === 'accept' ? 'accepted' : 'rejected',
+    updatedAt: serverTimestamp(),
   });
 }
 

@@ -66,10 +66,19 @@ export default function CollectionPage({ stickers, onToggleOwned, onAddDup, onRe
     setCameraError('');
     setOcrStatus('');
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      // Force back camera; ideal so it falls back gracefully on desktop
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: 'environment' },
+          width:  { ideal: 1280 },
+          height: { ideal: 720 },
+        }
+      });
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        videoRef.current.setAttribute('playsinline', ''); // iOS Safari
+        videoRef.current.muted = true;
         try { await videoRef.current.play(); } catch (e) {}
       }
       setCameraActive(true);
@@ -147,16 +156,24 @@ export default function CollectionPage({ stickers, onToggleOwned, onAddDup, onRe
     setOcrStatus('Scanning image…');
     try {
       const video = videoRef.current;
+      const fullW = video.videoWidth;
+      const fullH = video.videoHeight;
+      // The sticker code (e.g. ARG 2) is in the TOP ~28% of the sticker.
+      // Crop to that region so Tesseract isn't confused by the noisy bottom text.
+      const cropH = Math.floor(fullH * 0.28);
       const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+      canvas.width  = fullW;
+      canvas.height = cropH;
       const ctx = canvas.getContext('2d');
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      // Draw only the top 28% of the video frame
+      ctx.drawImage(video, 0, 0, fullW, cropH, 0, 0, fullW, cropH);
       const { createWorker } = await import('tesseract.js');
-      const worker = await createWorker({ logger: () => null });
-      await worker.load();
-      await worker.loadLanguage('eng');
-      await worker.initialize('eng');
+      // Tesseract.js v4+ API: pass language directly to createWorker
+      const worker = await createWorker('eng');
+      // Whitelist only uppercase letters, digits and space to reduce false reads
+      await worker.setParameters({
+        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ',
+      });
       const { data } = await worker.recognize(canvas);
       await worker.terminate();
       setOcrStatus(`OCR result: ${data.text.trim()}`);
