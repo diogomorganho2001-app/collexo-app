@@ -81,6 +81,9 @@ export default function App() {
     const s = stickersRef.current.find(s => s.code === code);
     if (!s?.owned) {
       window.appToast?.('Own this sticker first.');
+      return;
+    }
+    const next = stickersRef.current.map(s =>
       s.code === code
         ? { ...s, dupCount: (s.dupCount || 0) + 1, duplicate: true }
         : s
