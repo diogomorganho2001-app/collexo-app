@@ -288,13 +288,13 @@ export async function loadAllTradeHistory(userId) {
         ...d.data(),
         direction: 'sent',
         state: d.data().status === 'accepted' ? 'ongoing' : d.data().status || 'unknown',
-        timestamp: d.data().concludedAt?.toMillis?.() ?? d.data().createdAt?.toMillis?.() || 0
+        timestamp: (d.data().concludedAt?.toMillis?.() ?? d.data().createdAt?.toMillis?.()) || 0
       })),
       ...receivedSnap.docs.map(d => ({
         ...d.data(),
         direction: 'received',
         state: d.data().status === 'accepted' ? 'ongoing' : d.data().status || 'unknown',
-        timestamp: d.data().concludedAt?.toMillis?.() ?? d.data().createdAt?.toMillis?.() || 0
+        timestamp: (d.data().concludedAt?.toMillis?.() ?? d.data().createdAt?.toMillis?.()) || 0
       }))
     ];
     
