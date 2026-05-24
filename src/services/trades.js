@@ -78,38 +78,53 @@ export async function respondToProposal(propId, action) {
 /** Create or return an existing chat room for an accepted proposal. */
 export async function createChatRoomForProposal(proposal) {
   if (!proposal || !proposal.id) return null;
-  const chatQuery = query(collection(db, 'chats'), where('tradeId', '==', proposal.id));
-  const chatSnap = await getDocs(chatQuery);
-  if (!chatSnap.empty) {
-    return { id: chatSnap.docs[0].id, ...chatSnap.docs[0].data() };
+
+  // Always re-fetch the proposal from Firestore so we have fresh, complete data.
+  // The locally-cached object may have missing fromUid/toUid fields if it was
+  // created with fromUserId/toUserId, which would make participantIds empty.
+  const freshSnap = await getDoc(doc(db, 'proposals', proposal.id));
+  const p = freshSnap.exists() ? { id: freshSnap.id, ...freshSnap.data() } : proposal;
+
+  // Build participantIds from whichever pair of fields is populated
+  const fromId = p.fromUid || p.fromUserId || null;
+  const toId   = p.toUid   || p.toUserId   || null;
+  const participantIds = [fromId, toId].filter(Boolean);
+
+  if (participantIds.length < 2) {
+    throw new Error(`Cannot create chat: missing participant IDs (from=${fromId}, to=${toId})`);
+  }
+
+  // Check if a chat room already exists for this trade.
+  // We query only documents where the current user is a participant so the
+  // Firestore read rule (uid in participantIds) is satisfied.
+  try {
+    const chatQuery = query(
+      collection(db, 'chats'),
+      where('tradeId', '==', p.id),
+      where('participantIds', 'array-contains', fromId)
+    );
+    const chatSnap = await getDocs(chatQuery);
+    if (!chatSnap.empty) {
+      return { id: chatSnap.docs[0].id, ...chatSnap.docs[0].data() };
+    }
+  } catch (_) {
+    // If the query fails (e.g. no docs yet), fall through and create the room
   }
 
   const room = {
-    tradeId: proposal.id,
-    tradeType: proposal.requestType || 'proposal',
-    participantIds: [proposal.fromUid, proposal.toUid].filter(Boolean),
-    participantEmails: [proposal.fromEmail, proposal.toEmail],
-    fromUid: proposal.fromUid,
-    toUid: proposal.toUid,
+    tradeId: p.id,
+    tradeType: p.requestType || 'proposal',
+    participantIds,
+    participantEmails: [p.fromEmail, p.toEmail].filter(Boolean),
+    fromUid: fromId,
+    toUid:   toId,
     lastMessage: '',
     lastUpdated: serverTimestamp(),
     createdAt: serverTimestamp(),
   };
 
-  // Retry creating the chat room a few times in case of transient errors
-  const maxAttempts = 3;
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      const roomRef = await addDoc(collection(db, 'chats'), room);
-      return { id: roomRef.id, ...room };
-    } catch (err) {
-      // If last attempt, rethrow so caller can handle/log
-      if (attempt === maxAttempts) throw err;
-      // small exponential backoff
-      await new Promise(r => setTimeout(r, 300 * attempt));
-    }
-  }
-  return null;
+  const roomRef = await addDoc(collection(db, 'chats'), room);
+  return { id: roomRef.id, ...room };
 }
 
 export async function loadChatRooms(userId) {
