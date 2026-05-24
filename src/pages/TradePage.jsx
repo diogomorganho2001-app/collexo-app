@@ -517,6 +517,7 @@ function FindTab({ stickers }) {
 function IncomingProposals({ stickers, onTradeAccepted }) {
   const [proposals, setProposals] = useState(null);
   const [chatCreateError, setChatCreateError] = useState(null);
+  const [proposalError, setProposalError] = useState(null);
 
   async function load() {
     if (!auth.currentUser) return;
@@ -548,13 +549,21 @@ function IncomingProposals({ stickers, onTradeAccepted }) {
         return;
       }
 
-      await respondToProposal(propId, action);
+      try {
+        await respondToProposal(propId, action);
+      } catch (respErr) {
+        console.error('Proposal update failed', respErr);
+        setProposalError({ proposalId: propId, message: respErr?.message || 'Failed to update proposal', code: respErr?.code });
+        // stop here - permission error likely originates from rules
+        return;
+      }
+
       if (action === 'accept') {
         try {
           await createChatRoomForProposal(p);
         } catch (chatErr) {
           console.error('Failed creating chat room', chatErr);
-          setChatCreateError({ proposalId: propId, message: chatErr?.message || 'Failed to create chat room' });
+          setChatCreateError({ proposalId: propId, message: chatErr?.message || 'Failed to create chat room', code: chatErr?.code });
         }
         onTradeAccepted?.(p);
         alert('✅ Trade accepted! A private chat room may be available.');
@@ -589,6 +598,24 @@ function IncomingProposals({ stickers, onTradeAccepted }) {
         </div>
       </div>
       <div className="proposals-list">
+        {proposalError && (
+          <div className="proposal-error-card">
+            <strong>Proposal update failed:</strong> {proposalError.message} {proposalError.code ? `(${proposalError.code})` : ''}
+            <div style={{ marginTop: 8 }}>
+              <button className="btn-bulk" onClick={async () => {
+                try {
+                  // retry the same accept action
+                  const p = proposals.find(x => x.id === proposalError.proposalId);
+                  if (!p) throw new Error('Proposal not found');
+                  await respond(p.id, 'accept', p);
+                  setProposalError(null);
+                } catch (err) {
+                  alert('Retry failed: ' + err.message);
+                }
+              }}>Retry accept</button>
+            </div>
+          </div>
+        )}
         {chatCreateError && (
           <div className="proposal-error-card">
             <strong>Chat creation failed:</strong> {chatCreateError.message}
