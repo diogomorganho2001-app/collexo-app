@@ -3,8 +3,6 @@ import { useAuth }           from './hooks/useAuth.js';
 import { useCollection }     from './hooks/useCollection.js';
 import { logout }            from './services/auth.js';
 import { checkMilestones, launchConfetti } from './utils/milestones.js';
-import { saveUserData }      from './services/collections.js';
-import defaultStickers      from '../stickers.json';
 
 import AuthPage        from './pages/AuthPage.jsx';
 import HomePage        from './pages/HomePage.jsx';
@@ -176,41 +174,15 @@ export default function App() {
   }, []);
 
   // ── Reset cloud data to stickers.json defaults ─────────────────────────
-  const handleResetCloudData = useCallback(async () => {
-    const confirmed = window.confirm(
-      '⚠️ WARNING: This will reset your Firestore data to stickers.json defaults.\n\n' +
-      'All your progress (owned, duplicates, wanted, trades) will be LOST.\n\n' +
-      'Continue?'
-    );
-    if (!confirmed) return;
-
+  const handleSyncToCloud = useCallback(async () => {
     try {
-      // Build fresh stickers from defaults
-      const freshStickers = defaultStickers.map(s => ({
-        ...s,
-        owned: false,
-        dupCount: 0,
-        duplicate: false,
-        wanted: false,
-      }));
-
-      // Save directly to Firestore
-      await saveUserData(user.uid, user.email, freshStickers, [], {});
-
-      // Update local state
-      stickersRef.current = freshStickers;
-      setStickers(freshStickers);
-      setTradeHistory([]);
-      setMilestonesSeen({});
-      tradeHistoryRef.current = [];
-      milestoneSeenRef.current = {};
-
-      window.appToast?.('✅ Cloud data reset to defaults. Refresh the page to sync.');
+      await persistData();
+      window.appToast?.('✅ Corrected codes synced to cloud.');
     } catch (error) {
-      console.error('Reset failed:', error);
-      window.appToast?.('❌ Reset failed: ' + (error?.message || 'unknown error'));
+      console.error('Sync failed:', error);
+      window.appToast?.('❌ Sync failed: ' + (error?.message || 'unknown error'));
     }
-  }, [user]);
+  }, [persistData]);
 
   // ── Loading / auth guard ─────────────────────────────────────────────────
   if (loading) return null;
@@ -234,8 +206,8 @@ export default function App() {
             <button className="btn-theme" onClick={() => setLightMode(m => !m)}>
               {lightMode ? '☀️' : '🌙'}
             </button>
-            <button className="btn-theme" title="Reset cloud data to defaults" onClick={handleResetCloudData}>
-              🔄
+            <button className="btn-theme" title="Sync corrected codes to cloud" onClick={handleSyncToCloud}>
+              ☁️
             </button>
             <button className="btn-logout" onClick={logout}>Sign Out</button>
           </div>
