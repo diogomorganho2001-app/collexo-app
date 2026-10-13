@@ -1,4 +1,4 @@
-import topsUcc2025Json from '../../data/sports/football/topps-ucc-2025-26.json' with { type: 'json' };
+import topsUcc2025Json from '../../data/sports/football/topps-ucc-2025-26.json' assert { type: 'json' };
 
 function safeString(value) {
   return typeof value === 'string' ? value.trim() : '';
@@ -100,7 +100,10 @@ function normalizeCollectionData(filePath, fileData) {
 const registeredCatalogueData = [
   {
     filePath: '../../data/sports/football/topps-ucc-2025-26.json',
-    fileData: topsUcc2025Json,
+    fileData: {
+      ...topsUcc2025Json,
+      coverImage: '/topps_ucc_2526.jpg',
+    },
   },
 ];
 
