@@ -176,7 +176,7 @@ export default function App() {
   // ── Reset cloud data to stickers.json defaults ─────────────────────────
   const handleSyncToCloud = useCallback(async () => {
     try {
-      await persistData();
+      await peSrsistData();
       window.appToast?.('✅ Corrected codes synced to cloud.');
     } catch (error) {
       console.error('Sync failed:', error);
