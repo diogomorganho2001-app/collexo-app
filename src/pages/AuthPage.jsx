@@ -2,9 +2,10 @@ import React, { useState } from 'react';
 import { login, register } from '../services/auth.js';
 
 export default function AuthPage() {
-  const [email,    setEmail]    = useState('');
-  const [password, setPassword] = useState('');
-  const [error,    setError]    = useState('');
+  const [email,        setEmail]        = useState('');
+  const [password,     setPassword]     = useState('');
+  const [displayName,  setDisplayName]  = useState('');
+  const [error,        setError]        = useState('');
 
   async function handleLogin() {
     setError('');
@@ -18,7 +19,7 @@ export default function AuthPage() {
   async function handleRegister() {
     setError('');
     try {
-      await register(email, password);
+      await register(email, password, displayName);
     } catch (e) {
       setError(e.message);
     }
@@ -37,6 +38,12 @@ export default function AuthPage() {
             placeholder="Email address"
             value={email}
             onChange={e => setEmail(e.target.value)}
+          />
+          <input
+            type="text"
+            placeholder="Public collector name"
+            value={displayName}
+            onChange={e => setDisplayName(e.target.value)}
           />
           <input
             type="password"

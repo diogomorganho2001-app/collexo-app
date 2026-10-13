@@ -1,4 +1,4 @@
-import catalogueJson from '../../data/sports/football/topps-ucc-2025-26.json';
+import catalogueJson from '../../data/sports/football/topps-ucc-2025-26.json' with { type: 'json' };
 
 function safeString(value) {
   return typeof value === 'string' ? value : '';

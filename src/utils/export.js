@@ -4,13 +4,13 @@ export function exportDuplicates(stickers) {
     window.appToast?.('No duplicates to share!');
     return;
   }
-  let text = '🔄 My Panini WC 2026 DUPLICATES\n\n';
+  let text = '🔄 My Collexo duplicates\n\n';
   dups.forEach(s => {
     text += `${s.code} – ${s.name} (${s.team})${s.dupCount > 1 ? ' ×' + s.dupCount : ''}\n`;
   });
   text += '\n📬 Contact me to trade!';
   if (navigator.share) {
-    navigator.share({ title: 'My Panini Duplicates', text });
+    navigator.share({ title: 'My Collexo duplicates', text });
   } else {
     navigator.clipboard.writeText(text);
     window.appToast?.('Duplicates list copied to clipboard!');
@@ -23,7 +23,7 @@ export function exportMissing(stickers) {
     window.appToast?.('You own everything! 🏆');
     return;
   }
-  let text = '🔍 My Panini WC 2026 MISSING STICKERS\n\n';
+  let text = '🔍 My Collexo missing cards\n\n';
   const teams = [...new Set(missing.map(s => s.team))].sort();
   teams.forEach(team => {
     const ts = missing.filter(s => s.team === team);

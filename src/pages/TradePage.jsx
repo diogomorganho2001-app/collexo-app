@@ -8,6 +8,7 @@ import {
   getProposalById,
   respondToProposal,
   createChatRoomForProposal,
+  acceptProposalAndCreateChat,
   loadChatRooms,
   loadChatMessages,
   sendChatMessage,
@@ -87,8 +88,8 @@ function FindTab({ stickers }) {
     setResultInfo(null); setCanGet([]);
     try {
       const found = await findUserByEmail(emailParam);
-      if (!found) { setStatus({ type: 'error', msg: `❌ No user found with email "${emailParam}".` }); return; }
-      const friendDups = (found.data.stickers || []).filter(s => s.duplicate || s.dupCount > 0);
+      if (!found) { setStatus({ type: 'error', msg: `❌ No public collector found for "${emailParam}".` }); return; }
+      const friendDups = (found.data.dups || found.data.stickers || []).filter(s => s.duplicate || s.dupCount > 0 || s.qty > 0);
       if (!friendDups.length) { setStatus({ type: 'error', msg: `😔 ${emailParam} has no duplicates right now.` }); return; }
       const myMissingCodes = new Set(stickers.filter(s => !s.owned).map(s => s.code));
       const matches = friendDups.filter(s => myMissingCodes.has(s.code));
@@ -106,10 +107,14 @@ function FindTab({ stickers }) {
     try {
       const collection = await getUserCollection(email);
       if (!collection) {
-        setStatus({ type: 'error', msg: 'Could not load collection' });
+        setStatus({ type: 'error', msg: 'Could not load public trade listing' });
         return;
       }
-      setTheirStickers(collection);
+      setTheirStickers({
+        ...collection,
+        email: collection.displayName || collection.email || email,
+        displayName: collection.displayName || collection.email || email,
+      });
       setShowingStickers(true);
       setStatus(null);
     } catch (err) {
@@ -234,7 +239,7 @@ function FindTab({ stickers }) {
                 {searchResults.map(user => (
                   <div
                     key={user.uid}
-                    onClick={() => selectUser(user.email)}
+                    onClick={() => selectUser(user.displayName || user.uid)}
                     style={{
                       padding: '10px 12px',
                       borderBottom: '1px solid var(--border)',
@@ -247,7 +252,7 @@ function FindTab({ stickers }) {
                     onMouseOver={e => e.currentTarget.style.background = 'var(--background)'}
                     onMouseOut={e => e.currentTarget.style.background = 'transparent'}
                   >
-                    <span>{user.email}</span>
+                    <span>{user.displayName || 'Collector'}</span>
                     <span style={{ fontSize: 12, color: 'var(--muted)' }}>{user.completionPct}%</span>
                   </div>
                 ))}
@@ -264,7 +269,7 @@ function FindTab({ stickers }) {
 
       {resultInfo && !showingStickers && (
         <div className="trade-result-info">
-          <strong>{resultInfo.email}</strong>
+          <strong>{resultInfo.email || resultInfo.displayName || 'Collector'}</strong>
           <div className="trade-counts">
             <div className="tc-item">
               <span className="tc-val">{resultInfo.friendDups.length}</span>
@@ -469,7 +474,7 @@ function FindTab({ stickers }) {
       {showingStickers && theirStickers && (
         <div style={{ marginTop: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <h4 style={{ margin: 0 }}>📇 {theirStickers.email}'s Collection</h4>
+            <h4 style={{ margin: 0 }}>📇 {(theirStickers.displayName || theirStickers.email || 'Collector')}'s Collection</h4>
             <button
               className="btn-reject"
               onClick={() => setShowingStickers(false)}
@@ -540,27 +545,29 @@ function IncomingProposals({ stickers, onTradeAccepted }) {
       return;
     }
 
-    // Step 1: update proposal status
-    try {
-      await respondToProposal(propId, action);
-    } catch (respErr) {
-      console.error('Proposal update failed:', respErr);
-      window.appToast?.(`Proposal update failed: ${respErr?.message || respErr}`);
-      return;
-    }
-
-    // Step 2: if accepted, create the chat room
     if (action === 'accept') {
       try {
-        await createChatRoomForProposal(p);
+        const room = await acceptProposalAndCreateChat(propId, uid);
         onTradeAccepted?.(p);
         window.appToast?.('✅ Trade accepted! Go to the Chats tab to coordinate.');
-      } catch (chatErr) {
-        console.error('Chat room creation failed:', chatErr);
-        window.appToast?.(`Trade accepted ✅, but chat creation failed: ${chatErr?.message || String(chatErr)}`);
+        if (room?.id) {
+          setChatCreateError(null);
+        }
+      } catch (err) {
+        console.error('Proposal acceptance or chat creation failed:', err);
+        window.appToast?.(`Trade acceptance failed: ${err?.message || err}`);
+        setChatCreateError({ message: err?.message || String(err), proposalId: propId });
+        return;
       }
     } else {
-      window.appToast?.('Trade declined.');
+      try {
+        await respondToProposal(propId, action, uid);
+        window.appToast?.('Trade declined.');
+      } catch (respErr) {
+        console.error('Proposal update failed:', respErr);
+        window.appToast?.(`Proposal update failed: ${respErr?.message || respErr}`);
+        return;
+      }
     }
     load();
   }
@@ -991,12 +998,8 @@ function BoardTab({ stickers }) {
     if (!dups.length) { setPublishMessage('You have no duplicates to publish.'); return; }
     const missing = stickers.filter(s => !s.owned).slice(0, 20);
     try {
-      await publishToBoard(
-        auth.currentUser.email,
-        auth.currentUser.uid,
-        dups.map(s => ({ code: s.code, name: s.name, team: s.team, qty: s.dupCount })),
-        missing.map(s => ({ code: s.code, name: s.name })),
-      );
+      const publicProfile = { uid: auth.currentUser.uid, displayName: auth.currentUser.displayName || 'Collector', avatarUrl: '', dups: dups.map(s => ({ code: s.code, name: s.name, team: s.team, qty: s.dupCount })), missing: missing.map(s => ({ code: s.code, name: s.name })) };
+      await publishToBoard(publicProfile);
       setPublishMessage('✅ Your duplicates are now on the public trade board!');
       load();
       window.setTimeout(() => setPublishMessage(''), 3000);
@@ -1027,13 +1030,13 @@ function BoardTab({ stickers }) {
           <div className="trade-empty"><span className="te-icon">📋</span>Nobody has posted yet. Be the first!</div>
         ) : (
           board
-            .filter(entry => entry.email !== auth.currentUser?.email)
+            .filter(entry => entry.uid !== auth.currentUser?.uid)
             .map(entry => {
               const theyHaveINeed = (entry.dups || []).filter(s => myMissing.has(s.code));
               return (
                 <div key={entry.id} className="board-card">
                   <div className="board-card-header">
-                    <span className="bc-email">{entry.email}</span>
+                    <span className="bc-email">{entry.displayName || 'Collector'}</span>
                     <span className="bc-count">{(entry.dups || []).length} duplicates</span>
                   </div>
                   {theyHaveINeed.length > 0 && (
@@ -1051,12 +1054,6 @@ function BoardTab({ stickers }) {
                       <span className="board-dup-chip">+{(entry.dups || []).length - 10} more</span>
                     )}
                   </div>
-                  <button
-                    className="btn-contact"
-                    onClick={() => window.location.href = `mailto:${entry.email}?subject=Panini WC 2026 Trade`}
-                  >
-                    📧 Contact
-                  </button>
                 </div>
               );
             })

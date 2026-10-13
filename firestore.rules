@@ -1,0 +1,310 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function hasOnlyKeys(data, allowedKeys) {
+      return data.keys().hasOnly(allowedKeys);
+    }
+
+    function isNonEmptyString(value, minLen, maxLen) {
+      return value is string
+        && value.size() >= minLen
+        && value.size() <= maxLen
+        && value.trim() != '';
+    }
+
+    function isOptionalHttpUrl(value) {
+      return value is string && (value == '' || value.matches('^https?://.*'));
+    }
+
+    function isParticipantList(value) {
+      return value is list
+        && value.size() == 2
+        && value[0] is string
+        && value[1] is string
+        && value[0] != value[1]
+        && value[0] != ''
+        && value[1] != '';
+    }
+
+    function isCardList(value, maxItems) {
+      return value is list
+        && value.size() <= maxItems;
+    }
+
+    function isValidProposalUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        'status',
+        'updatedAt',
+        'responseMessage'
+      ]);
+    }
+
+    match /users/{uid} {
+      allow get: if signedIn() && request.auth.uid == uid;
+      allow create, update: if signedIn()
+        && request.auth.uid == uid
+        && hasOnlyKeys(request.resource.data, [
+          'email',
+          'stickers',
+          'tradeHistory',
+          'milestonesSeen',
+          'completionPct',
+          'createdAt',
+          'updatedAt'
+        ])
+        && request.resource.data.email is string
+        && request.resource.data.email.matches('.*@.*')
+        && request.resource.data.stickers is list
+        && request.resource.data.tradeHistory is list
+        && request.resource.data.milestonesSeen is map
+        && request.resource.data.completionPct is int
+        && request.resource.data.completionPct >= 0
+        && request.resource.data.completionPct <= 100
+        && (!('uid' in request.resource.data));
+      allow delete: if false;
+      allow list: if false;
+    }
+
+    match /publicProfiles/{uid} {
+      allow get: if resource.data.isPublic == true;
+      allow list: if signedIn() && resource.data.isPublic == true;
+
+      allow create, update: if signedIn()
+        && request.auth.uid == uid
+        && hasOnlyKeys(request.resource.data, [
+          'uid',
+          'displayName',
+          'avatarUrl',
+          'bio',
+          'isPublic',
+          'completionPct',
+          'createdAt',
+          'updatedAt'
+        ])
+        && request.resource.data.uid == uid
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() >= 1
+        && request.resource.data.displayName.size() <= 48
+        && request.resource.data.avatarUrl is string
+        && isOptionalHttpUrl(request.resource.data.avatarUrl)
+        && request.resource.data.bio is string
+        && request.resource.data.bio.size() <= 180
+        && request.resource.data.isPublic == true
+        && request.resource.data.completionPct is int
+        && request.resource.data.completionPct >= 0
+        && request.resource.data.completionPct <= 100
+        && !('email' in request.resource.data)
+        && !('stickers' in request.resource.data)
+        && !('tradeHistory' in request.resource.data)
+        && !('milestonesSeen' in request.resource.data)
+        && !('privateCollection' in request.resource.data);
+      allow delete: if false;
+    }
+
+    match /tradeBoard/{listingId} {
+      allow get, list: if true;
+
+      allow create, update: if signedIn()
+        && request.auth.uid == listingId
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.listingType in ['duplicates', 'wanted', 'both']
+        && isNonEmptyString(request.resource.data.displayName, 1, 48)
+        && request.resource.data.displayName == request.resource.data.displayName.trim()
+        && request.resource.data.avatarUrl is string
+        && isOptionalHttpUrl(request.resource.data.avatarUrl)
+        && request.resource.data.dups is list
+        && request.resource.data.missing is list
+        && request.resource.data.dups.size() <= 200
+        && request.resource.data.missing.size() <= 200
+        && hasOnlyKeys(request.resource.data, [
+          'uid',
+          'ownerUid',
+          'displayName',
+          'avatarUrl',
+          'listingType',
+          'dups',
+          'missing',
+          'createdAt',
+          'updatedAt'
+        ])
+        && (resource == null || request.resource.data.ownerUid == resource.data.ownerUid)
+        && (resource == null || request.resource.data.uid == resource.data.uid)
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.updatedAt is timestamp;
+
+      allow delete: if false;
+    }
+
+    match /proposals/{proposalId} {
+      allow get, list: if signedIn()
+        && (resource.data.senderUid == request.auth.uid || resource.data.recipientUid == request.auth.uid);
+
+      allow create: if signedIn()
+        && request.resource.data.senderUid == request.auth.uid
+        && request.resource.data.recipientUid is string
+        && request.resource.data.recipientUid != request.resource.data.senderUid
+        && request.resource.data.senderUid != request.resource.data.recipientUid
+        && request.resource.data.senderEmail is string
+        && request.resource.data.recipientEmail is string
+        && request.resource.data.giveCode is string
+        && request.resource.data.giveCode.size() > 0
+        && request.resource.data.giveCode.size() <= 80
+        && request.resource.data.wantCode is string
+        && request.resource.data.wantCode.size() > 0
+        && request.resource.data.wantCode.size() <= 80
+        && request.resource.data.giveName is string
+        && request.resource.data.wantName is string
+        && request.resource.data.giveTeam is string
+        && request.resource.data.wantTeam is string
+        && request.resource.data.message is string
+        && request.resource.data.message.size() <= 500
+        && request.resource.data.requestType in ['proposal', 'interest']
+        && request.resource.data.attachedWantList is list
+        && request.resource.data.attachedWantList.size() <= 20
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.updatedAt is timestamp
+        && hasOnlyKeys(request.resource.data, [
+          'senderUid',
+          'recipientUid',
+          'senderEmail',
+          'recipientEmail',
+          'giveCode',
+          'giveName',
+          'giveTeam',
+          'wantCode',
+          'wantName',
+          'wantTeam',
+          'message',
+          'requestType',
+          'attachedWantList',
+          'status',
+          'createdAt',
+          'updatedAt',
+          'responseMessage'
+        ])
+        && exists(/databases/$(database)/documents/publicProfiles/$(request.resource.data.recipientUid));
+
+      allow update: if signedIn()
+        && request.auth.uid == resource.data.recipientUid
+        && resource.data.senderUid == request.resource.data.senderUid
+        && resource.data.recipientUid == request.resource.data.recipientUid
+        && resource.data.giveCode == request.resource.data.giveCode
+        && resource.data.wantCode == request.resource.data.wantCode
+        && resource.data.status == 'pending'
+        && request.resource.data.status in ['accepted', 'rejected']
+        && request.resource.data.status != resource.data.status
+        && request.resource.data.updatedAt is timestamp
+        && isValidProposalUpdate();
+
+      allow delete: if false;
+    }
+
+    match /chats/{chatId} {
+      allow get, list: if signedIn()
+        && resource.data.participantIds is list
+        && request.auth.uid in resource.data.participantIds;
+
+      allow create: if signedIn()
+        && request.resource.data.proposalId is string
+        && request.resource.data.proposalId.size() > 0
+        && request.resource.data.tradeId is string
+        && request.resource.data.tradeId.size() > 0
+        && request.resource.data.tradeType in ['proposal', 'interest']
+        && request.resource.data.participantIds is list
+        && isParticipantList(request.resource.data.participantIds)
+        && request.auth.uid in request.resource.data.participantIds
+        && request.resource.data.senderUid in request.resource.data.participantIds
+        && request.resource.data.recipientUid in request.resource.data.participantIds
+        && request.resource.data.senderUid != request.resource.data.recipientUid
+        && request.resource.data.participantEmails is list
+        && request.resource.data.readBy is map
+        && request.resource.data.readBy.size() <= 2
+        && request.resource.data.closed == false
+        && request.resource.data.lastMessage is string
+        && request.resource.data.lastMessage.size() <= 2000
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.updatedAt is timestamp
+        && request.resource.data.lastUpdated is timestamp
+        && hasOnlyKeys(request.resource.data, [
+          'proposalId',
+          'tradeId',
+          'tradeType',
+          'participantIds',
+          'participantEmails',
+          'senderUid',
+          'recipientUid',
+          'readBy',
+          'closed',
+          'lastMessage',
+          'lastUpdated',
+          'createdAt',
+          'updatedAt'
+        ])
+        && exists(/databases/$(database)/documents/proposals/$(request.resource.data.proposalId))
+        && get(/databases/$(database)/documents/proposals/$(request.resource.data.proposalId)).data.status == 'accepted'
+        && get(/databases/$(database)/documents/proposals/$(request.resource.data.proposalId)).data.senderUid == request.resource.data.senderUid
+        && get(/databases/$(database)/documents/proposals/$(request.resource.data.proposalId)).data.recipientUid == request.resource.data.recipientUid;
+
+      allow update: if signedIn()
+        && resource.data.participantIds is list
+        && request.auth.uid in resource.data.participantIds
+        && request.resource.data.participantIds == resource.data.participantIds
+        && request.resource.data.senderUid == resource.data.senderUid
+        && request.resource.data.recipientUid == resource.data.recipientUid
+        && request.resource.data.proposalId == resource.data.proposalId
+        && request.resource.data.tradeId == resource.data.tradeId
+        && request.resource.data.tradeType == resource.data.tradeType
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'readBy',
+          'closed',
+          'closedAt',
+          'lastMessage',
+          'lastUpdated',
+          'updatedAt'
+        ])
+        && request.resource.data.readBy is map
+        && request.resource.data.readBy.size() <= 2
+        && request.resource.data.lastMessage is string
+        && request.resource.data.lastMessage.size() <= 2000
+        && request.resource.data.updatedAt is timestamp
+        && request.resource.data.lastUpdated is timestamp;
+
+      allow delete: if false;
+    }
+
+    match /chats/{chatId}/messages/{messageId} {
+      allow get, list: if signedIn()
+        && get(/databases/$(database)/documents/chats/$(chatId)).data.participantIds is list
+        && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participantIds;
+
+      allow create: if signedIn()
+        && request.resource.data.senderId == request.auth.uid
+        && request.resource.data.type in ['text', 'system']
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 2000
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.deliveredAt is timestamp
+        && request.resource.data.senderEmail is string
+        && request.resource.data.senderEmail.size() <= 255
+        && hasOnlyKeys(request.resource.data, [
+          'senderId',
+          'senderEmail',
+          'type',
+          'text',
+          'createdAt',
+          'deliveredAt'
+        ])
+        && get(/databases/$(database)/documents/chats/$(chatId)).data.participantIds is list
+        && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participantIds;
+
+      allow update, delete: if false;
+    }
+  }
+}

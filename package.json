@@ -1,12 +1,14 @@
 {
-  "name": "panini-wc2026",
+  "name": "collexo",
   "private": true,
   "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --test",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-collexo \"node --test tests/firestore.rules.test.js\""
   },
   "dependencies": {
     "firebase": "^10.12.2",
@@ -15,9 +17,11 @@
     "tesseract.js": "^4.1.1"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.0",
     "@types/react": "^18.3.1",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.1",
+    "firebase-tools": "^13.31.2",
     "vite": "^5.3.1"
   }
 }

@@ -9,6 +9,7 @@ import HomePage from './pages/HomePage.jsx';
 import CollectionDashboard from './pages/CollectionDashboard.jsx';
 import CompactStats from './components/CompactStats.jsx';
 import MilestoneToast from './components/MilestoneToast.jsx';
+import { ensurePublicProfile } from './services/profiles.js';
 
 export default function App() {
   const { user, loading } = useAuth();
@@ -41,9 +42,18 @@ export default function App() {
     };
   }, []);
 
-  // Load user data when auth resolves
+  // Load user data when auth resolves and ensure a public profile exists for discovery
   useEffect(() => {
-    if (user) loadData(user.uid);
+    if (!user) return;
+    loadData(user.uid);
+    ensurePublicProfile(user.uid, {
+      uid: user.uid,
+      displayName: (user.email || 'Collector').split('@')[0],
+      avatarUrl: '',
+      bio: '',
+      isPublic: true,
+      completionPct: 0,
+    }).catch(error => console.warn('Public profile initialization failed:', error));
   }, [user]);
 
   // Apply light mode class to body
