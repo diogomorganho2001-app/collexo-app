@@ -472,6 +472,11 @@ body.light-mode .topbar {
   gap: 12px;
 }
 
+.page-supporting-text {
+  margin: 0;
+  color: var(--text-muted);
+}
+
 .page-chip {
   border: 1px solid var(--border);
   background: rgba(46, 124, 255, 0.09);
@@ -480,6 +485,199 @@ body.light-mode .topbar {
   padding: 8px 12px;
   font-size: 0.8rem;
   font-weight: 700;
+}
+
+.breadcrumb-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.breadcrumb-separator {
+  color: var(--text-soft);
+}
+
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.filter-grid label {
+  display: grid;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.filter-grid select,
+.toolbar-card input,
+.toolbar-card select,
+.detail-toolbar input,
+.detail-toolbar select {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(9, 18, 27, 0.72);
+  color: var(--text);
+  padding: 10px 12px;
+}
+
+body.light-mode .filter-grid select,
+body.light-mode .toolbar-card input,
+body.light-mode .toolbar-card select,
+body.light-mode .detail-toolbar input,
+body.light-mode .detail-toolbar select {
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.collection-card,
+.collection-tile {
+  text-align: left;
+  width: 100%;
+  border: 1px solid var(--border);
+  background: rgba(18, 38, 58, 0.88);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.collection-card:hover,
+.collection-card:focus-visible,
+.collection-tile:hover,
+.collection-tile:focus-visible {
+  transform: translateY(-2px);
+  border-color: rgba(94, 143, 255, 0.7);
+  box-shadow: 0 12px 24px rgba(8, 17, 24, 0.28);
+}
+
+.collection-card:focus-visible,
+.collection-tile:focus-visible,
+.primary-button:focus-visible,
+.secondary-button:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid rgba(90, 145, 255, 0.9);
+  outline-offset: 2px;
+}
+
+.collection-card__cover {
+  width: 100%;
+  min-height: 188px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--border);
+}
+
+.collection-cover {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.fallback-cover {
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, rgba(35, 101, 211, 0.7), rgba(255, 149, 76, 0.6));
+  color: #fff;
+  font-size: clamp(1.6rem, 3vw, 2.2rem);
+  font-weight: 800;
+}
+
+.collection-card__content {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.collection-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.collection-card h3 {
+  margin: 0;
+  font-size: 1.08rem;
+}
+
+.collection-card p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.collection-detail-header {
+  display: grid;
+  grid-template-columns: minmax(180px, 260px) 1fr;
+  gap: 18px;
+  padding: 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(18, 38, 58, 0.88);
+  box-shadow: var(--shadow);
+}
+
+.collection-cover-wrap {
+  min-height: 220px;
+}
+
+.collection-detail-copy {
+  display: grid;
+  gap: 16px;
+}
+
+.collection-detail-copy h1 {
+  margin: 0;
+  font-size: clamp(1.9rem, 3vw, 2.8rem);
+}
+
+.meta-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.collection-stats-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.detail-toolbar {
+  grid-template-columns: minmax(0, 1.3fr) 180px 180px 180px;
+}
+
+.compact-meta {
+  gap: 6px;
+}
+
+.compact-meta > div {
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+}
+
+.inline-link {
+  color: var(--primary-soft);
+  font-weight: 700;
+}
+
+.card-browse {
+  min-height: 240px;
+}
+
+@media (max-width: 640px) {
+  .collection-detail-header {
+    grid-template-columns: 1fr;
+  }
+
+  .collection-stats-grid,
+  .detail-toolbar,
+  .filter-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .summary-grid {

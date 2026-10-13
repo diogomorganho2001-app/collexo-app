@@ -20,14 +20,24 @@ const AUTH_ROUTES = new Set(['signin', 'register']);
 const APP_ROUTES = new Set(['collection', 'explore', 'market', 'watchlist', 'trades', 'profile']);
 
 function getCurrentHashRoute() {
-  if (typeof window === 'undefined') return 'collection';
+  if (typeof window === 'undefined') return { route: 'collection', collectionId: null };
   const hash = window.location.hash.replace(/^#/, '').trim();
-  return hash || 'collection';
+  if (!hash) return { route: 'collection', collectionId: null };
+  if (hash === 'explore') return { route: 'explore', collectionId: null };
+  if (hash.startsWith('explore/')) {
+    return {
+      route: 'explore',
+      collectionId: decodeURIComponent(hash.replace(/^explore\//, '')),
+    };
+  }
+  return { route: hash, collectionId: null };
 }
 
 export default function App() {
   const { user, loading } = useAuth();
-  const [route, setRoute] = useState(getCurrentHashRoute);
+  const initialRoute = getCurrentHashRoute();
+  const [route, setRoute] = useState(initialRoute.route);
+  const [selectedCollectionId, setSelectedCollectionId] = useState(initialRoute.collectionId);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [lightMode, setLightMode] = useState(false);
   const [toasts, setToasts] = useState([]);
@@ -42,7 +52,11 @@ export default function App() {
   } = useCollection(user);
 
   useEffect(() => {
-    const handleHashChange = () => setRoute(getCurrentHashRoute());
+    const handleHashChange = () => {
+      const next = getCurrentHashRoute();
+      setRoute(next.route);
+      setSelectedCollectionId(next.collectionId || null);
+    };
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
@@ -189,8 +203,21 @@ export default function App() {
 
   const handleClubClick = useCallback((club) => {
     setClubNavTarget(club);
+    setSelectedCollectionId(null);
     setRoute('collection');
     window.location.hash = '#collection';
+  }, []);
+
+  const handleSelectCollection = useCallback((collectionId) => {
+    setSelectedCollectionId(collectionId);
+    setRoute('explore');
+    window.location.hash = `#explore/${encodeURIComponent(collectionId)}`;
+  }, []);
+
+  const handleBackToCollections = useCallback(() => {
+    setSelectedCollectionId(null);
+    setRoute('explore');
+    window.location.hash = '#explore';
   }, []);
 
   const handleSyncToCloud = useCallback(async () => {
@@ -238,7 +265,15 @@ export default function App() {
   const renderPage = () => {
     switch (route) {
       case 'explore':
-        return <ExploreCollectionsPage stickers={stickers} onToggleOwned={handleToggleOwned} />;
+        return (
+          <ExploreCollectionsPage
+            stickers={stickers}
+            onToggleOwned={handleToggleOwned}
+            selectedCollectionId={selectedCollectionId}
+            onSelectCollection={handleSelectCollection}
+            onBackToCollections={handleBackToCollections}
+          />
+        );
       case 'market':
         return <MarketPage stickers={stickers} />;
       case 'watchlist':
@@ -279,8 +314,9 @@ export default function App() {
 
   const openRoute = (target) => {
     setRoute(target);
+    setSelectedCollectionId(null);
     setMobileNavOpen(false);
-    window.location.hash = `#${target}`;
+    window.location.hash = target === 'explore' ? '#explore' : `#${target}`;
   };
 
   return (
