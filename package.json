@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test src/services/catalogue.test.js src/services/profiles.test.js src/services/trades.test.js netlify/functions/price.test.js",
+    "test": "node --test src/services/catalogue.test.js src/services/profiles.test.js src/services/trades.test.js tests/price.test.js",
     "test:rules": "firebase emulators:exec --only firestore --project demo-collexo \"node --test tests/firestore.rules.test.js\""
   },
   "dependencies": {

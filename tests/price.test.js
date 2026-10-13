@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { handler } from './price.js';
-import { buildPriceResult, clearPricingCache, fetchCardPrice, filterComparableSales, formatPriceAmount } from '../../src/services/pricing.js';
+import { handler } from '../netlify/functions/price.js';
+import { buildPriceResult, clearPricingCache, fetchCardPrice, filterComparableSales, formatPriceAmount } from '../src/services/pricing.js';
 
 const originalEnv = { ...process.env };
 
