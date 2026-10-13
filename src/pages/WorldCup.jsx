@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import metadata from '../../metadata.json';
+import { catalogueMeta } from '../services/catalogue.js';
 import CollectionPage from './CollectionPage.jsx';
 import DuplicatesPage from './DuplicatesPage.jsx';
 import TradePage from './TradePage.jsx';
 import StatsPage from './StatsPage.jsx';
 
-export default function WorldCupPage({
+export default function CollectionDashboard({
   stickers,
   tradeHistory,
-  onTeamClick,
+  onClubClick,
   onToggleOwned,
   onToggleWanted,
   onAddDup,
@@ -17,19 +17,19 @@ export default function WorldCupPage({
   onBulkDup,
   onRemoveAllDup,
   onTradeAccepted,
-  initialTeam,
+  initialClub,
   initialTab = 'collection',
 }) {
   const [activeTab, setActiveTab] = useState(initialTab);
-  const [selectedTeam, setSelectedTeam] = useState(initialTeam || '');
+  const [selectedClub, setSelectedClub] = useState(initialClub || '');
 
   useEffect(() => {
     setActiveTab(initialTab);
   }, [initialTab]);
 
   useEffect(() => {
-    setSelectedTeam(initialTeam || '');
-  }, [initialTeam]);
+    setSelectedClub(initialClub || '');
+  }, [initialClub]);
 
   const owned      = stickers.filter(s => s.owned).length;
   const missing    = stickers.length - owned;
@@ -43,32 +43,35 @@ export default function WorldCupPage({
     { id: 'stats',      label: '📊 Stats'    },
   ];
 
-  const handleTeamSelect = (team) => {
+  const handleClubSelect = (club) => {
     setActiveTab('collection');
-    onTeamClick(team);
+    onClubClick(club);
   };
 
+  const setLabel = catalogueMeta.setName || 'Sports Card Set';
+  const sportLabel = catalogueMeta.sport ? catalogueMeta.sport.charAt(0).toUpperCase() + catalogueMeta.sport.slice(1) : 'Sport';
+
   return (
-    <section id="worldCupPage">
+    <section id="collectionDashboard">
       <div className="home-hero">
         <img
-          src="/worldcup_page_image.jpg"
-          alt="World Cup hero"
+          src="/Collexo_banner_pic.png"
+          alt="Collexo collection hero"
           className="hero-bg-image"
         />
-        <h2 className="hero-title">⚽ FIFA World Cup 2026</h2>
-        <p className="hero-subtitle">{metadata.hostSubtitle}</p>
+        <h2 className="hero-title">COLLEXO</h2>
+        <p className="hero-subtitle">{setLabel}</p>
         <div className="host-strip">
-          {metadata.hosts.map((h, i) => (
-            <div key={h} className="host-pill">{metadata.hostFlags[i]} {h}</div>
-          ))}
-          <div className="host-pill">📅 {metadata.dates}</div>
+          <div className="host-pill">🏷️ {catalogueMeta.manufacturer}</div>
+          <div className="host-pill">⚽ {sportLabel}</div>
+          <div className="host-pill">📅 {catalogueMeta.season}</div>
+          <div className="host-pill">🏆 {catalogueMeta.league || 'Collection'}</div>
         </div>
       </div>
 
 
 
-      <div className="worldcup-summary">
+      <div className="collection-summary">
         <div className="stats">
           <div className="stat-card owned">
             <div className="stat-icon-wrap">✅</div>
@@ -92,18 +95,18 @@ export default function WorldCupPage({
           </div>
         </div>
 
-        <div className="worldcup-progress">
-          <div className="worldcup-progress-header">
+        <div className="collection-progress">
+          <div className="collection-progress-header">
             <span>Completion</span>
             <strong>{percent}%</strong>
           </div>
-          <div className="worldcup-progress-track">
-            <div className="worldcup-progress-fill" style={{ width: percent + '%' }} />
+          <div className="collection-progress-track">
+            <div className="collection-progress-fill" style={{ width: percent + '%' }} />
           </div>
         </div>
       </div>
 
-      <div className="worldcup-tabs">
+      <div className="collection-tabs">
         {tabs.map(tab => (
           <button
             key={tab.id}
@@ -115,7 +118,7 @@ export default function WorldCupPage({
           </button>
         ))}
       </div>
-      <div className="worldcup-content">
+      <div className="collection-content">
         {activeTab === 'collection' && (
           <CollectionPage
             stickers={stickers}
@@ -125,7 +128,7 @@ export default function WorldCupPage({
             onBulkOwned={onBulkOwned}
             onBulkDup={onBulkDup}
             onToggleWanted={onToggleWanted}
-            initialTeam={selectedTeam}
+            initialTeam={selectedClub}
           />
         )}
 
@@ -147,7 +150,7 @@ export default function WorldCupPage({
         {activeTab === 'stats' && (
           <StatsPage
             stickers={stickers}
-            onTeamClick={handleTeamSelect}
+            onClubClick={handleClubSelect}
           />
         )}
       </div>

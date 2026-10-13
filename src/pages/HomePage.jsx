@@ -1,6 +1,6 @@
 import React from 'react';
 
-export default function HomePage({ onEnterWorldCup }) {
+export default function HomePage({ onEnterCollection }) {
   return (
     <section id="homePage">
       <div className="home-hero">
@@ -9,17 +9,18 @@ export default function HomePage({ onEnterWorldCup }) {
           alt="Collexo hero"
           className="hero-bg-image"
         />
-        <h2 className="hero-title">COLLEXO<br /><span className="year">Collect-Connect-Complete</span></h2>
+        <h2 className="hero-title">COLLEXO<br /><span className="year">Collect Connect Complete</span></h2>
       </div>
 
       <div className="info-section">
-        <div className="section-title">📖 About the App</div>
+        <div className="section-title">📖 About Collexo</div>
         <div className="app-card">
           <div className="app-info">
-            <h3>Collexo</h3>
+            <h3>Sports card collecting, portfolio tracking, and trading.</h3>
             <p>
-              App made for collecting and managing sticker albums.
+              Track your collection across sport, manufacturer, set, and season while keeping duplicates, wants, and trade activity in one place.
             </p>
+            <button className="btn-gold" onClick={onEnterCollection}>Open your collection</button>
           </div>
         </div>
       </div>

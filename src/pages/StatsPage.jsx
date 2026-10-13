@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { fetchLeaderboard } from '../services/leaderboard.js';
 import { auth } from '../services/firebase.js';
 
-export default function StatsPage({ stickers, onTeamClick }) {
+export default function StatsPage({ stickers, onClubClick }) {
   const [leaderboard, setLeaderboard] = useState(null);
 
   useEffect(() => {
@@ -21,7 +21,7 @@ export default function StatsPage({ stickers, onTeamClick }) {
     <section id="statsPage">
       {/* Team Breakdown */}
       <div className="team-breakdown info-section" style={{ paddingTop: 20 }}>
-        <div className="section-title">🌍 Team Progress</div>
+        <div className="section-title">�️ Club Progress</div>
         <div className="team-breakdown-grid">
           {teams.map(team => {
             const ts       = stickers.filter(s => s.team === team);
@@ -32,7 +32,7 @@ export default function StatsPage({ stickers, onTeamClick }) {
               <div
                 key={team}
                 className={'team-row' + (complete ? ' complete' : '')}
-                onClick={() => onTeamClick(team)}
+                onClick={() => onClubClick(team)}
               >
                 <span className="tr-name">{complete ? '✅ ' : ''}{team}</span>
                 <span className="tr-count">{owned}/{ts.length}</span>

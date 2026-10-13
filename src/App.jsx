@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useAuth }           from './hooks/useAuth.js';
-import { useCollection }     from './hooks/useCollection.js';
-import { logout }            from './services/auth.js';
+import { useAuth } from './hooks/useAuth.js';
+import { useCollection } from './hooks/useCollection.js';
+import { logout } from './services/auth.js';
 import { checkMilestones, launchConfetti } from './utils/milestones.js';
 
-import AuthPage        from './pages/AuthPage.jsx';
-import HomePage        from './pages/HomePage.jsx';
-import WorldCupPage    from './pages/WorldCup.jsx';
-import CompactStats    from './components/CompactStats.jsx';
-import MilestoneToast  from './components/MilestoneToast.jsx';
+import AuthPage from './pages/AuthPage.jsx';
+import HomePage from './pages/HomePage.jsx';
+import CollectionDashboard from './pages/CollectionDashboard.jsx';
+import CompactStats from './components/CompactStats.jsx';
+import MilestoneToast from './components/MilestoneToast.jsx';
 
 export default function App() {
   const { user, loading } = useAuth();
@@ -24,7 +24,7 @@ export default function App() {
   const [activePage,   setActivePage]   = useState('home');
   const [lightMode,    setLightMode]    = useState(false);
   const [toasts,       setToasts]       = useState([]);
-  const [teamNavTarget, setTeamNavTarget] = useState('');
+  const [clubNavTarget, setClubNavTarget] = useState('');
 
   // Global app toast bridge for non-component modules
   useEffect(() => {
@@ -167,17 +167,17 @@ export default function App() {
     await afterChange(next);
   }, [afterChange]);
 
-  // ── Team click: jump to World Cup collection filtered by team ─────────
-  const handleTeamClick = useCallback((team) => {
-    setTeamNavTarget(team);
-    setActivePage('worldcup');
+  // ── Club click: jump to the collection filtered by club/team ─────────
+  const handleClubClick = useCallback((club) => {
+    setClubNavTarget(club);
+    setActivePage('collection');
   }, []);
 
-  // ── Reset cloud data to stickers.json defaults ─────────────────────────
+  // ── Reset cloud data to the current catalogue defaults ─────────────────
   const handleSyncToCloud = useCallback(async () => {
     try {
-      await peSrsistData();
-      window.appToast?.('✅ Corrected codes synced to cloud.');
+      await persistData();
+      window.appToast?.('✅ Collection synced to cloud.');
     } catch (error) {
       console.error('Sync failed:', error);
       window.appToast?.('❌ Sync failed: ' + (error?.message || 'unknown error'));
@@ -190,8 +190,8 @@ export default function App() {
   if (!ready)  return null;
 
   const navItems = [
-    { id: 'home',      label: '🏠 Home'       },
-    { id: 'worldcup',  label: '🌍 World Cup'  },
+    { id: 'home', label: '🏠 Home' },
+    { id: 'collection', label: '📚 Collection' },
   ];
 
   return (
@@ -226,20 +226,20 @@ export default function App() {
           ))}
         </div>
 
-        {activePage === 'worldcup' && <CompactStats stickers={stickers} />}
+        {activePage === 'collection' && <CompactStats stickers={stickers} />}
       </header>
 
       <div className="container">
         <div className={activePage === 'home' ? '' : 'hidden'}>
           <HomePage
-            onEnterWorldCup={() => setActivePage('worldcup')}
+            onEnterCollection={() => setActivePage('collection')}
           />
         </div>
-        <div className={activePage === 'worldcup' ? '' : 'hidden'}>
-          <WorldCupPage
+        <div className={activePage === 'collection' ? '' : 'hidden'}>
+          <CollectionDashboard
             stickers={stickers}
             tradeHistory={tradeHistory}
-            onTeamClick={handleTeamClick}
+            onClubClick={handleClubClick}
             onToggleOwned={handleToggleOwned}
             onAddDup={handleAddDup}
             onRemoveDup={handleRemoveDup}
@@ -248,7 +248,7 @@ export default function App() {
             onRemoveAllDup={handleRemoveAllDup}
             onToggleWanted={handleToggleWanted}
             onTradeAccepted={handleTradeAccepted}
-            initialTeam={teamNavTarget}
+            initialClub={clubNavTarget}
           />
         </div>
       </div>

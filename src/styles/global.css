@@ -1,38 +1,38 @@
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap');
 
 :root {
-  --bg:        #0a0a0b;
-  --surface:   #111114;
-  --card:      #17171c;
-  --card2:     #1d1d24;
-  --border:    rgba(255,255,255,.07);
-  --border2:   rgba(255,255,255,.12);
-  --gold:      #e8b84b;
-  --gold2:     #f5d07a;
-  --gold-dim:  rgba(232,184,75,.12);
-  --green:     #3dd68c;
-  --green-dim: rgba(61,214,140,.1);
-  --sky:       #60b4ff;
-  --sky-dim:   rgba(96,180,255,.1);
-  --red:       #ff5a65;
-  --red-dim:   rgba(255,90,101,.1);
-  --text:      #ededf0;
-  --text2:     #9898a8;
-  --text3:     #5c5c6e;
+  --bg:        #07111d;
+  --surface:   #0d1b2a;
+  --card:      #112437;
+  --card2:     #18314d;
+  --border:    rgba(133, 183, 255, .12);
+  --border2:   rgba(133, 183, 255, .18);
+  --gold:      #3ca9ff;
+  --gold2:     #72d0ff;
+  --gold-dim:  rgba(60,169,255,.14);
+  --green:     #6fe5a7;
+  --green-dim: rgba(111,229,167,.1);
+  --sky:       #6ec8ff;
+  --sky-dim:   rgba(110,200,255,.1);
+  --red:       #ff8a5b;
+  --red-dim:   rgba(255,138,91,.12);
+  --text:      #eef7ff;
+  --text2:     #b4c7d8;
+  --text3:     #7088a0;
   --r:         12px;
   --r2:        8px;
 }
 
 body.light-mode {
-  --bg:      #f4f4f6;
-  --surface: #ebebee;
+  --bg:      #edf4fb;
+  --surface: #e4edf7;
   --card:    #ffffff;
-  --card2:   #f8f8fb;
-  --border:  rgba(0,0,0,.08);
-  --border2: rgba(0,0,0,.14);
-  --text:    #111114;
-  --text2:   #555568;
-  --text3:   #9898a8;
+  --card2:   #f7fbff;
+  --border:  rgba(10, 34, 58, .08);
+  --border2: rgba(10, 34, 58, .12);
+  --text:    #0d1f2d;
+  --text2:   #44627c;
+  --text3:   #778ca0;
 }
 
 *, *::before, *::after { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -317,14 +317,14 @@ body.light-mode header {
   font-weight: 700;
 }
 
-.worldcup-tabs {
+.collection-tabs {
   display: flex;
   gap: 2px;
   padding: 0 18px 12px;
   overflow-x: auto;
 }
 
-.worldcup-tabs button {
+.collection-tabs button {
   flex: 1;
   min-width: 0;
   min-height: 34px;
@@ -340,27 +340,27 @@ body.light-mode header {
   transition: color .15s, background .15s;
 }
 
-.worldcup-tabs button:hover {
+.collection-tabs button:hover {
   color: var(--text2);
   background: var(--surface);
 }
 
-.worldcup-tabs button.active {
+.collection-tabs button.active {
   background: var(--gold-dim);
   color: var(--gold);
   font-weight: 700;
 }
 
-.worldcup-summary {
+.collection-summary {
   padding: 16px 18px 0;
 }
 
-.worldcup-progress {
+.collection-progress {
   margin-top: 18px;
   padding: 0 0 10px;
 }
 
-.worldcup-progress-header {
+.collection-progress-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -371,7 +371,7 @@ body.light-mode header {
   color: var(--text3);
 }
 
-.worldcup-progress-track {
+.collection-progress-track {
   width: 100%;
   height: 12px;
   background: var(--border);
@@ -379,7 +379,7 @@ body.light-mode header {
   overflow: hidden;
 }
 
-.worldcup-progress-fill {
+.collection-progress-fill {
   height: 100%;
   width: 0;
   background: linear-gradient(90deg, var(--gold), rgba(232,184,75,.75));
@@ -406,15 +406,15 @@ body.light-mode header {
     height: 120px;
   }
 
-  .worldcup-summary .stats {
+  .collection-summary .stats {
     grid-template-columns: 1fr;
   }
 
-  .worldcup-tabs {
+  .collection-tabs {
     padding: 0 14px 12px;
   }
 
-  .worldcup-tabs button {
+  .collection-tabs button {
     min-height: 38px;
     padding: 0 10px;
   }
