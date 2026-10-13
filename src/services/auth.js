@@ -3,16 +3,25 @@ import {
   signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
+  sendPasswordResetEmail,
 } from 'firebase/auth';
 import { auth } from './firebase.js';
 import { ensurePublicProfile } from './profiles.js';
 
+function requireAuth() {
+  if (!auth) {
+    throw new Error('Firebase authentication is not configured for this environment.');
+  }
+  return auth;
+}
+
 export function login(email, password) {
-  return signInWithEmailAndPassword(auth, email, password);
+  return signInWithEmailAndPassword(requireAuth(), email, password);
 }
 
 export async function register(email, password, displayName = '') {
-  const credential = await createUserWithEmailAndPassword(auth, email, password);
+  const authInstance = requireAuth();
+  const credential = await createUserWithEmailAndPassword(authInstance, email, password);
   const safeName = displayName && String(displayName).trim()
     ? String(displayName).trim()
     : (email || '').split('@')[0] || 'Collector';
@@ -29,10 +38,14 @@ export async function register(email, password, displayName = '') {
   return credential;
 }
 
+export function resetPassword(email) {
+  return sendPasswordResetEmail(requireAuth(), email);
+}
+
 export function logout() {
-  return signOut(auth);
+  return signOut(requireAuth());
 }
 
 export function onAuthChange(callback) {
-  return onAuthStateChanged(auth, callback);
+  return onAuthStateChanged(requireAuth(), callback);
 }

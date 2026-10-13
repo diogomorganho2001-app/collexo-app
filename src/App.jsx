@@ -5,14 +5,33 @@ import { logout } from './services/auth.js';
 import { checkMilestones, launchConfetti } from './utils/milestones.js';
 
 import AuthPage from './pages/AuthPage.jsx';
-import HomePage from './pages/HomePage.jsx';
+import RegisterPage from './pages/RegisterPage.jsx';
 import CollectionDashboard from './pages/CollectionDashboard.jsx';
+import ExploreCollectionsPage from './pages/ExploreCollectionsPage.jsx';
+import MarketPage from './pages/MarketPage.jsx';
+import WatchlistPage from './pages/WatchlistPage.jsx';
+import ProfilePage from './pages/ProfilePage.jsx';
+import TradePage from './pages/TradePage.jsx';
 import CompactStats from './components/CompactStats.jsx';
 import MilestoneToast from './components/MilestoneToast.jsx';
 import { ensurePublicProfile } from './services/profiles.js';
 
+const AUTH_ROUTES = new Set(['signin', 'register']);
+const APP_ROUTES = new Set(['collection', 'explore', 'market', 'watchlist', 'trades', 'profile']);
+
+function getCurrentHashRoute() {
+  if (typeof window === 'undefined') return 'collection';
+  const hash = window.location.hash.replace(/^#/, '').trim();
+  return hash || 'collection';
+}
+
 export default function App() {
   const { user, loading } = useAuth();
+  const [route, setRoute] = useState(getCurrentHashRoute);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [lightMode, setLightMode] = useState(false);
+  const [toasts, setToasts] = useState([]);
+  const [clubNavTarget, setClubNavTarget] = useState('');
 
   const {
     stickers, setStickers,
@@ -22,27 +41,22 @@ export default function App() {
     stickersRef, tradeHistoryRef, milestoneSeenRef,
   } = useCollection(user);
 
-  const [activePage,   setActivePage]   = useState('home');
-  const [lightMode,    setLightMode]    = useState(false);
-  const [toasts,       setToasts]       = useState([]);
-  const [clubNavTarget, setClubNavTarget] = useState('');
-
-  // Global app toast bridge for non-component modules
   useEffect(() => {
-    function innerToast(event) {
-      const message = event.detail?.message || event.detail || '';
-      if (!message) return;
-      setToasts(prev => [...prev, message]);
-    }
-    window.addEventListener('app-toast', innerToast);
-    window.appToast = message => window.dispatchEvent(new CustomEvent('app-toast', { detail: { message } }));
-    return () => {
-      window.removeEventListener('app-toast', innerToast);
-      delete window.appToast;
-    };
+    const handleHashChange = () => setRoute(getCurrentHashRoute());
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
-  // Load user data when auth resolves and ensure a public profile exists for discovery
+  useEffect(() => {
+    if (!loading && !user && !AUTH_ROUTES.has(route)) {
+      window.location.hash = '#signin';
+    }
+
+    if (!loading && user && route === 'signin') {
+      window.location.hash = '#collection';
+    }
+  }, [route, loading, user]);
+
   useEffect(() => {
     if (!user) return;
     loadData(user.uid);
@@ -53,220 +67,280 @@ export default function App() {
       bio: '',
       isPublic: true,
       completionPct: 0,
-    }).catch(error => console.warn('Public profile initialization failed:', error));
+    }).catch((error) => console.warn('Public profile initialization failed:', error));
   }, [user]);
 
-  // Apply light mode class to body
   useEffect(() => {
     document.body.classList.toggle('light-mode', lightMode);
   }, [lightMode]);
 
-  // ── Helper: fire milestones then persist ────────────────────────────────
   const afterChange = useCallback(async (updatedStickers, updatedMilestonesSeen) => {
-    const ms      = updatedMilestonesSeen ?? milestoneSeenRef.current;
+    const ms = updatedMilestonesSeen ?? milestoneSeenRef.current;
     const newToasts = checkMilestones(updatedStickers, ms);
+
     if (newToasts.length) {
       setToasts(newToasts);
       setMilestonesSeen({ ...ms });
       milestoneSeenRef.current = ms;
-      if (newToasts.some(t => t.includes('ALBUM COMPLETE'))) launchConfetti();
+      if (newToasts.some((toast) => toast.includes('ALBUM COMPLETE'))) {
+        launchConfetti();
+      }
     }
-    stickersRef.current      = updatedStickers;
+
+    stickersRef.current = updatedStickers;
     milestoneSeenRef.current = ms;
     setStickers([...updatedStickers]);
     await persistData();
-  }, [persistData]);
+  }, [persistData, setMilestonesSeen, setStickers]);
 
-  // ── Sticker mutations ────────────────────────────────────────────────────
   const handleToggleOwned = useCallback(async (code) => {
-    const next = stickersRef.current.map(s => {
-      if (s.code !== code) return s;
-      const owned = !s.owned;
-      return { ...s, owned, duplicate: owned ? s.duplicate : false, dupCount: owned ? s.dupCount : 0 };
+    const next = stickersRef.current.map((item) => {
+      if (item.code !== code) return item;
+      const owned = !item.owned;
+      return { ...item, owned, duplicate: owned ? item.duplicate : false, dupCount: owned ? item.dupCount : 0 };
     });
     await afterChange(next);
   }, [afterChange]);
 
   const handleAddDup = useCallback(async (code) => {
-    const s = stickersRef.current.find(s => s.code === code);
-    if (!s?.owned) {
-      window.appToast?.('Own this sticker first.');
+    const item = stickersRef.current.find((entry) => entry.code === code);
+    if (!item?.owned) {
+      window.appToast?.('Own this card first.');
       return;
     }
-    const next = stickersRef.current.map(s =>
-      s.code === code
-        ? { ...s, dupCount: (s.dupCount || 0) + 1, duplicate: true }
-        : s
+
+    const next = stickersRef.current.map((entry) => entry.code === code
+      ? { ...entry, dupCount: (entry.dupCount || 0) + 1, duplicate: true }
+      : entry
     );
     setStickers([...next]);
     stickersRef.current = next;
     await persistData();
-  }, [persistData]);
+  }, [persistData, setStickers]);
 
   const handleRemoveDup = useCallback(async (code) => {
-    const next = stickersRef.current.map(s => {
-      if (s.code !== code) return s;
-      const dc = Math.max(0, (s.dupCount || 0) - 1);
-      return { ...s, dupCount: dc, duplicate: dc > 0 };
+    const next = stickersRef.current.map((item) => {
+      if (item.code !== code) return item;
+      const dupCount = Math.max(0, (item.dupCount || 0) - 1);
+      return { ...item, dupCount, duplicate: dupCount > 0 };
     });
     setStickers([...next]);
     stickersRef.current = next;
     await persistData();
-  }, [persistData]);
+  }, [persistData, setStickers]);
 
   const handleRemoveAllDup = useCallback(async (code) => {
-    const next = stickersRef.current.map(s =>
-      s.code === code ? { ...s, dupCount: 0, duplicate: false } : s
-    );
+    const next = stickersRef.current.map((item) => item.code === code ? { ...item, dupCount: 0, duplicate: false } : item);
     setStickers([...next]);
     stickersRef.current = next;
     await persistData();
-  }, [persistData]);
+  }, [persistData, setStickers]);
 
   const handleToggleWanted = useCallback(async (code) => {
-    const next = stickersRef.current.map(s =>
-      s.code === code ? { ...s, wanted: !s.wanted } : s
-    );
+    const next = stickersRef.current.map((item) => item.code === code ? { ...item, wanted: !item.wanted } : item);
     setStickers([...next]);
     stickersRef.current = next;
     await persistData();
-  }, [persistData]);
+  }, [persistData, setStickers]);
 
   const handleBulkOwned = useCallback(async (codes) => {
     const codeSet = new Set(codes);
-    const next = stickersRef.current.map(s =>
-      codeSet.has(s.code) ? { ...s, owned: true } : s
-    );
+    const next = stickersRef.current.map((item) => codeSet.has(item.code) ? { ...item, owned: true } : item);
     await afterChange(next);
   }, [afterChange]);
 
   const handleBulkDup = useCallback(async (codes) => {
     const codeSet = new Set(codes);
-    const next = stickersRef.current.map(s => {
-      if (!codeSet.has(s.code) || !s.owned) return s;
-      return { ...s, dupCount: (s.dupCount || 0) + 1, duplicate: true };
+    const next = stickersRef.current.map((item) => {
+      if (!codeSet.has(item.code) || !item.owned) return item;
+      return { ...item, dupCount: (item.dupCount || 0) + 1, duplicate: true };
     });
     setStickers([...next]);
     stickersRef.current = next;
     await persistData();
-  }, [persistData]);
+  }, [persistData, setStickers]);
 
-  // ── Trade accepted (from proposals) ─────────────────────────────────────
   const handleTradeAccepted = useCallback(async (proposal) => {
-    const next = stickersRef.current.map(s => {
-      if (s.code === proposal.giveCode) return { ...s, owned: true };
-      if (s.code === proposal.wantCode && s.dupCount > 0) {
-        const dc = s.dupCount - 1;
-        return { ...s, dupCount: dc, duplicate: dc > 0 };
+    const next = stickersRef.current.map((item) => {
+      if (item.code === proposal.giveCode) return { ...item, owned: true };
+      if (item.code === proposal.wantCode && item.dupCount > 0) {
+        const dupCount = item.dupCount - 1;
+        return { ...item, dupCount, duplicate: dupCount > 0 };
       }
-      return s;
+      return item;
     });
+
     const newHistory = [
       ...tradeHistoryRef.current,
       {
-        partner:  proposal.fromEmail,
-        gave:     proposal.wantCode,
+        partner: proposal.fromEmail,
+        gave: proposal.wantCode,
         gaveName: proposal.wantName || proposal.wantCode,
-        got:      proposal.giveCode,
-        gotName:  proposal.giveName || proposal.giveCode,
-        date:     new Date().toLocaleDateString(),
+        got: proposal.giveCode,
+        gotName: proposal.giveName || proposal.giveCode,
+        date: new Date().toLocaleDateString(),
       },
     ];
+
     setTradeHistory(newHistory);
     tradeHistoryRef.current = newHistory;
     await afterChange(next);
-  }, [afterChange]);
+  }, [afterChange, setTradeHistory]);
 
-  // ── Club click: jump to the collection filtered by club/team ─────────
   const handleClubClick = useCallback((club) => {
     setClubNavTarget(club);
-    setActivePage('collection');
+    setRoute('collection');
+    window.location.hash = '#collection';
   }, []);
 
-  // ── Reset cloud data to the current catalogue defaults ─────────────────
   const handleSyncToCloud = useCallback(async () => {
     try {
       await persistData();
-      window.appToast?.('✅ Collection synced to cloud.');
+      window.appToast?.('Collection synced to cloud.');
     } catch (error) {
       console.error('Sync failed:', error);
-      window.appToast?.('❌ Sync failed: ' + (error?.message || 'unknown error'));
+      window.appToast?.('Sync failed: ' + (error?.message || 'unknown error'));
     }
   }, [persistData]);
 
-  // ── Loading / auth guard ─────────────────────────────────────────────────
-  if (loading) return null;
-  if (!user)   return <AuthPage />;
-  if (!ready)  return null;
+  const handleSignOut = useCallback(async () => {
+    try {
+      await logout();
+      setMobileNavOpen(false);
+      window.location.hash = '#signin';
+    } catch (error) {
+      console.error('Sign out failed:', error);
+    }
+  }, []);
+
+  if (loading) {
+    return <div className="loading-shell"><div className="loading-spinner" /></div>;
+  }
+
+  if (!user) {
+    if (route === 'register') return <RegisterPage />;
+    return <AuthPage />;
+  }
+
+  if (!ready) {
+    return <div className="loading-shell"><div className="loading-spinner" /></div>;
+  }
 
   const navItems = [
-    { id: 'home', label: '🏠 Home' },
-    { id: 'collection', label: '📚 Collection' },
+    { id: 'collection', label: 'My Collection' },
+    { id: 'explore', label: 'Explore Collections' },
+    { id: 'market', label: 'Market' },
+    { id: 'watchlist', label: 'My Watchlist' },
+    { id: 'trades', label: 'Trades' },
+    { id: 'profile', label: 'Profile & Settings' },
   ];
 
-  return (
-    <div id="appPage">
-      <header>
-        <div className="header-top">
-          <div className="brand">
-            <h1>Collexo</h1>
-            <span>Collections Tracker</span>
-          </div>
-          <div className="header-actions">
-            <button className="btn-theme" onClick={() => setLightMode(m => !m)}>
-              {lightMode ? '☀️' : '🌙'}
-            </button>
-            <button className="btn-theme" title="Sync corrected codes to cloud" onClick={handleSyncToCloud}>
-              ☁️
-            </button>
-            <button className="btn-logout" onClick={logout}>Sign Out</button>
-          </div>
-        </div>
-
-        <div className="nav">
-          {navItems.map(item => (
-            <button
-              key={item.id}
-              id={`${item.id}Tab`}
-              className={activePage === item.id ? 'active' : ''}
-              onClick={() => setActivePage(item.id)}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-
-        {activePage === 'collection' && <CompactStats stickers={stickers} />}
-      </header>
-
-      <div className="container">
-        <div className={activePage === 'home' ? '' : 'hidden'}>
-          <HomePage
-            onEnterCollection={() => setActivePage('collection')}
-          />
-        </div>
-        <div className={activePage === 'collection' ? '' : 'hidden'}>
-          <CollectionDashboard
+  const renderPage = () => {
+    switch (route) {
+      case 'explore':
+        return <ExploreCollectionsPage stickers={stickers} onToggleOwned={handleToggleOwned} />;
+      case 'market':
+        return <MarketPage stickers={stickers} />;
+      case 'watchlist':
+        return <WatchlistPage stickers={stickers} />;
+      case 'trades':
+        return (
+          <TradePage
             stickers={stickers}
             tradeHistory={tradeHistory}
-            onClubClick={handleClubClick}
-            onToggleOwned={handleToggleOwned}
-            onAddDup={handleAddDup}
-            onRemoveDup={handleRemoveDup}
-            onBulkOwned={handleBulkOwned}
-            onBulkDup={handleBulkDup}
-            onRemoveAllDup={handleRemoveAllDup}
-            onToggleWanted={handleToggleWanted}
             onTradeAccepted={handleTradeAccepted}
-            initialClub={clubNavTarget}
           />
-        </div>
-      </div>
+        );
+      case 'profile':
+        return <ProfilePage user={user} stickers={stickers} />;
+      case 'collection':
+      default:
+        return (
+          <>
+            <CompactStats stickers={stickers} />
+            <CollectionDashboard
+              stickers={stickers}
+              tradeHistory={tradeHistory}
+              onClubClick={handleClubClick}
+              onToggleOwned={handleToggleOwned}
+              onAddDup={handleAddDup}
+              onRemoveDup={handleRemoveDup}
+              onBulkOwned={handleBulkOwned}
+              onBulkDup={handleBulkDup}
+              onRemoveAllDup={handleRemoveAllDup}
+              onToggleWanted={handleToggleWanted}
+              onTradeAccepted={handleTradeAccepted}
+              initialClub={clubNavTarget}
+            />
+          </>
+        );
+    }
+  };
 
-      <MilestoneToast
-        messages={toasts}
-        onDone={() => setToasts([])}
-      />
+  const openRoute = (target) => {
+    setRoute(target);
+    setMobileNavOpen(false);
+    window.location.hash = `#${target}`;
+  };
+
+  return (
+    <div className="app-shell">
+      <aside className={`sidebar ${mobileNavOpen ? 'open' : ''}`}>
+        <div className="brand-block">
+          <div className="brand-mark">C</div>
+          <div>
+            <p className="eyebrow">Premium service</p>
+            <h2>Collexo</h2>
+          </div>
+        </div>
+
+        <nav className="side-nav" aria-label="Main navigation">
+          {navItems.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={route === item.id ? 'nav-item active' : 'nav-item'}
+              onClick={() => openRoute(item.id)}
+            >
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </nav>
+
+        <div className="sidebar-footer">
+          <button type="button" className="secondary-button" onClick={() => setLightMode((value) => !value)}>
+            {lightMode ? 'Light mode' : 'Dark mode'}
+          </button>
+          <button type="button" className="signout-button" onClick={handleSignOut}>Sign out</button>
+        </div>
+      </aside>
+
+      <main className="main-panel">
+        <header className="topbar">
+          <button
+            type="button"
+            className="mobile-nav-toggle"
+            aria-label="Toggle navigation"
+            onClick={() => setMobileNavOpen((value) => !value)}
+          >
+            ☰
+          </button>
+
+          <div className="topbar-copy">
+            <p className="eyebrow">Dashboard</p>
+            <h1>{navItems.find((item) => item.id === route)?.label || 'My Collection'}</h1>
+          </div>
+
+          <div className="topbar-actions">
+            <button type="button" className="secondary-button" onClick={handleSyncToCloud}>Sync</button>
+            <button type="button" className="primary-button small-button" onClick={() => openRoute('explore')}>Add cards</button>
+          </div>
+        </header>
+
+        <div className="content-area">{renderPage()}</div>
+      </main>
+
+      <MilestoneToast messages={toasts} onDone={() => setToasts([])} />
     </div>
   );
 }
