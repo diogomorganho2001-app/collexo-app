@@ -21,7 +21,7 @@ test.afterEach(() => {
   global.fetch = undefined;
 });
 
-test('market proxy returns unavailable when API key is missing', async () => {
+test('market proxy returns not_configured when API key is missing', async () => {
   delete process.env.THECARDAPI_KEY;
   delete process.env.THE_CARD_API_KEY;
   delete process.env.NETLIFY_THECARDAPI_KEY;
@@ -29,18 +29,18 @@ test('market proxy returns unavailable when API key is missing', async () => {
   const response = await handler({ httpMethod: 'GET', queryStringParameters: { name: 'Kylian Mbappé' } });
   const body = JSON.parse(response.body);
 
-  assert.equal(body.status, 'unavailable');
+  assert.equal(body.status, 'not_configured');
   assert.equal(body.reason, 'missing_api_key');
 });
 
-test('market proxy converts rate-limit errors into a specific unavailable reason', async () => {
+test('market proxy converts rate-limit errors into a specific rate-limited status', async () => {
   process.env.THECARDAPI_KEY = 'demo-key';
   global.fetch = mockFetchOnce({ error: 'rate_limited' }, { ok: false, status: 429 });
 
   const response = await handler({ httpMethod: 'GET', queryStringParameters: { name: 'Cristiano Ronaldo' } });
   const body = JSON.parse(response.body);
 
-  assert.equal(body.status, 'unavailable');
+  assert.equal(body.status, 'rate_limited');
   assert.equal(body.reason, 'rate_limited');
 });
 
@@ -113,17 +113,42 @@ test('fetchCardPrice reuses cache entries and surfaces request failures cleanly'
 
   global.fetch = failedFetch;
   const failure = await fetchCardPrice({ ...card, code: 'TEST2' });
-  assert.equal(failure.status, 'unavailable');
+  assert.equal(failure.status, 'provider_error');
   assert.equal(failure.reason, 'request_failed');
 });
 
-test('buildPriceResult returns insufficient data when comparable sales are not close enough', () => {
+test('buildPriceResult returns no_match when comparable sales are not close enough', () => {
   const result = buildPriceResult(
     { name: 'Kylian Mbappe', setName: '2024 Topps', manufacturer: 'Topps' },
     [{ price: 20, player: 'Someone Else', card_set: 'Other Set' }],
     { coverage_date_from: '2025-01-01', coverage_date_to: '2025-01-10' }
   );
 
-  assert.equal(result.status, 'unavailable');
-  assert.equal(result.reason, 'insufficient_data');
+  assert.equal(result.status, 'no_match');
+  assert.equal(result.reason, 'no_match');
+});
+
+test('missing pricing configuration is surfaced as not configured instead of a misleading generic unavailable result', async () => {
+  delete process.env.THECARDAPI_KEY;
+  delete process.env.THE_CARD_API_KEY;
+  delete process.env.NETLIFY_THECARDAPI_KEY;
+
+  const response = await handler({ httpMethod: 'GET', queryStringParameters: { name: 'Kylian Mbappé' } });
+  const payload = JSON.parse(response.body);
+
+  assert.equal(payload.status, 'not_configured');
+  assert.equal(payload.reason, 'missing_api_key');
+  assert.match(payload.message, /API key/i);
+});
+
+test('ambiguous matches return a no_match status with a clear UI message', () => {
+  const result = buildPriceResult(
+    { name: 'Kylian Mbappe', setName: '2024 Topps', manufacturer: 'Topps', team: 'Real Madrid' },
+    [{ price: 85, player: 'Kylian Mbappe', card_set: 'Other Set', manufacturer: 'Panini' }],
+    { coverage_date_from: '2025-01-01', coverage_date_to: '2025-01-10' }
+  );
+
+  assert.equal(result.status, 'no_match');
+  assert.equal(result.reason, 'no_match');
+  assert.match(result.message, /No matching card found/i);
 });

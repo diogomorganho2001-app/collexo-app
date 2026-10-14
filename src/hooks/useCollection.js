@@ -26,49 +26,50 @@ function buildInitialStickers(saved) {
 
 /**
  * Manages the sticker collection state for a signed-in user.
- *
- * Returns:
- *  stickers, tradeHistory, milestonesSeen,
- *  setStickers, setTradeHistory, setMilestonesSeen,
- *  loadData(uid), persistData()
  */
 export function useCollection(user) {
-  const [stickers,       setStickers]       = useState([]);
-  const [tradeHistory,   setTradeHistory]   = useState([]);
+  const [stickers, setStickers] = useState([]);
+  const [tradeHistory, setTradeHistory] = useState([]);
   const [milestonesSeen, setMilestonesSeen] = useState({});
-  const [ready,          setReady]          = useState(false);
+  const [lists, setLists] = useState([]);
+  const [ready, setReady] = useState(false);
 
-  // Keep a ref so callbacks always have fresh values without re-creating them
-  const stickersRef       = useRef(stickers);
-  const tradeHistoryRef   = useRef(tradeHistory);
-  const milestoneSeenRef  = useRef(milestonesSeen);
-  stickersRef.current      = stickers;
-  tradeHistoryRef.current  = tradeHistory;
+  const stickersRef = useRef(stickers);
+  const tradeHistoryRef = useRef(tradeHistory);
+  const milestoneSeenRef = useRef(milestonesSeen);
+  const listsRef = useRef(lists);
+  stickersRef.current = stickers;
+  tradeHistoryRef.current = tradeHistory;
   milestoneSeenRef.current = milestonesSeen;
+  listsRef.current = lists;
 
   const loadData = useCallback(async (uid) => {
     const data = await loadUserData(uid);
     if (data) {
-      const s  = buildInitialStickers(data.stickers);
-      const th = data.tradeHistory   || [];
+      const s = buildInitialStickers(data.stickers);
+      const th = Array.isArray(data.tradeHistory) ? data.tradeHistory : [];
       const ms = data.milestonesSeen || {};
+      const ls = Array.isArray(data.lists) ? data.lists : [];
       setStickers(s);
       setTradeHistory(th);
       setMilestonesSeen(ms);
-      stickersRef.current      = s;
-      tradeHistoryRef.current  = th;
+      setLists(ls);
+      stickersRef.current = s;
+      tradeHistoryRef.current = th;
       milestoneSeenRef.current = ms;
-      // Backfill email if missing
+      listsRef.current = ls;
       if (!data.email && user) {
-        await saveUserData(uid, user.email, s, th, ms);
+        await saveUserData(uid, user.email, s, th, ms, ls);
       }
     } else {
       const s = buildInitialStickers(null);
       setStickers(s);
       setTradeHistory([]);
       setMilestonesSeen({});
+      setLists([]);
       stickersRef.current = s;
-      await saveUserData(uid, user?.email || '', s, [], {});
+      listsRef.current = [];
+      await saveUserData(uid, user?.email || '', s, [], {}, []);
     }
     setReady(true);
   }, [user]);
@@ -81,6 +82,7 @@ export function useCollection(user) {
       stickersRef.current,
       tradeHistoryRef.current,
       milestoneSeenRef.current,
+      listsRef.current,
     );
   }, [user]);
 
@@ -88,8 +90,8 @@ export function useCollection(user) {
     stickers, setStickers,
     tradeHistory, setTradeHistory,
     milestonesSeen, setMilestonesSeen,
+    lists, setLists,
     loadData, persistData, ready,
-    // Expose refs for use in callbacks that need latest values
-    stickersRef, tradeHistoryRef, milestoneSeenRef,
+    stickersRef, tradeHistoryRef, milestoneSeenRef, listsRef,
   };
 }

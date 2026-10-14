@@ -1,10 +1,18 @@
-import React, { useEffect, useState } from 'react';
-import { fetchCardPrice, formatPriceAmount } from '../services/pricing.js';
+import React, { useEffect, useMemo, useState } from 'react';
+import { fetchCardPrice, formatPriceAmount, getPriceStatusMeta } from '../services/pricing.js';
 
-export default function MarketPage({ stickers }) {
-  const trackedCards = (stickers || []).filter((card) => card.owned || card.wanted).slice(0, 12);
+export default function MarketPage({ stickers, lists = [], onAddCardToList, onCreateList }) {
+  const [marketFilter, setMarketFilter] = useState('all');
   const [prices, setPrices] = useState({});
   const [loading, setLoading] = useState(false);
+
+  const trackedCards = useMemo(() => {
+    const cards = (stickers || []).filter((card) => card.owned || card.wanted);
+    if (marketFilter === 'owned') return cards.filter((card) => card.owned);
+    if (marketFilter === 'wanted') return cards.filter((card) => card.wanted);
+    if (marketFilter === 'owned_and_wanted') return cards.filter((card) => card.owned && card.wanted);
+    return cards;
+  }, [marketFilter, stickers]);
 
   useEffect(() => {
     if (!trackedCards.length) {
@@ -16,12 +24,12 @@ export default function MarketPage({ stickers }) {
     async function loadPrices() {
       setLoading(true);
       const next = {};
-      for (const card of trackedCards) {
+      await Promise.all(trackedCards.map(async (card) => {
         const result = await fetchCardPrice(card);
         if (active) {
           next[card.code || `${card.name}-${card.team}`] = result;
         }
-      }
+      }));
       if (active) {
         setPrices(next);
         setLoading(false);
@@ -32,29 +40,53 @@ export default function MarketPage({ stickers }) {
     return () => {
       active = false;
     };
-  }, [stickers]);
+  }, [trackedCards]);
+
+  const openListPicker = (card, event) => {
+    event.preventDefault();
+    const name = window.prompt('Name your new list', 'Cards to buy');
+    if (name && typeof onCreateList === 'function') {
+      const list = onCreateList(name, '');
+      if (list && typeof onAddCardToList === 'function') {
+        onAddCardToList(list.id, card.code);
+      }
+    }
+  };
 
   return (
     <div className="page-shell">
       <div className="page-header row-between">
         <div>
           <p className="eyebrow">Market</p>
-          <h1>Market overview</h1>
+          <h1>My Market</h1>
         </div>
-        <div className="page-chip">Track card value</div>
+        <div className="page-chip">{trackedCards.length} relevant cards</div>
+      </div>
+
+      <div className="toolbar-card detail-toolbar">
+        <select value={marketFilter} onChange={(event) => setMarketFilter(event.target.value)}>
+          <option value="all">All Market Cards</option>
+          <option value="owned">Owned</option>
+          <option value="wanted">Wish List</option>
+          <option value="owned_and_wanted">Owned &amp; Wish Listed</option>
+        </select>
       </div>
 
       {trackedCards.length === 0 ? (
         <div className="empty-state">
-          <h3>Price data is not available yet.</h3>
-          <p>Add cards to your collection or watchlist to start tracking price signals when a source is connected.</p>
+          <h3>No relevant market cards yet.</h3>
+          <p>Add cards to your collection or watchlist to track them here. Market only shows cards you own or want.</p>
         </div>
       ) : (
         <div className="stacked-list">
           {trackedCards.map((card) => {
             const key = card.code || `${card.name}-${card.team}`;
             const priceResult = prices[key];
+            const statusMeta = getPriceStatusMeta(priceResult);
             const hasEstimate = priceResult?.status === 'available' && Number.isFinite(Number(priceResult.estimate));
+            const displayValue = hasEstimate
+              ? formatPriceAmount(priceResult.estimate, priceResult.currency)
+              : statusMeta.label;
 
             return (
               <div className="list-row" key={key}>
@@ -66,9 +98,12 @@ export default function MarketPage({ stickers }) {
                   <span className="muted">
                     {priceResult?.lastFetchedAt ? `Last updated: ${new Date(priceResult.lastFetchedAt).toLocaleDateString()}` : loading ? 'Checking market data…' : 'Last updated: not available'}
                   </span>
-                  <strong>
-                    {hasEstimate ? formatPriceAmount(priceResult.estimate, priceResult.currency) : 'Price unavailable'}
-                  </strong>
+                  <div className="market-row-actions">
+                    <strong>{displayValue}</strong>
+                    <button type="button" className="secondary-button small-button" onClick={(event) => openListPicker(card, event)}>
+                      Add to list
+                    </button>
+                  </div>
                 </div>
               </div>
             );

@@ -15,12 +15,25 @@ function median(values) {
   return sorted[middle];
 }
 
-function normalizeText(value = '') {
-  return String(value ?? '')
-    .replace(/[^a-z0-9]+/gi, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toLowerCase();
+function normalizeStatus(reason) {
+  switch (reason) {
+    case 'missing_api_key':
+      return 'not_configured';
+    case 'invalid_key':
+      return 'provider_error';
+    case 'rate_limited':
+      return 'rate_limited';
+    case 'timeout':
+    case 'request_failed':
+    case 'upstream_error':
+      return 'provider_error';
+    case 'insufficient_data':
+      return 'insufficient_data';
+    case 'no_match':
+      return 'no_match';
+    default:
+      return 'unavailable';
+  }
 }
 
 function buildSearchQuery(params = {}) {
@@ -53,7 +66,7 @@ function buildUnavailableResponse(reason, message, extra = {}) {
     statusCode: 200,
     headers: DEFAULT_HEADERS,
     body: JSON.stringify({
-      status: 'unavailable',
+      status: normalizeStatus(reason),
       reason,
       message,
       source: 'The Card API',
@@ -117,23 +130,23 @@ export const handler = async (event) => {
     }
 
     const sales = Array.isArray(payload?.data) ? payload.data : [];
+    if (!sales.length) {
+      return buildUnavailableResponse(
+        'insufficient_data',
+        'No recent marketplace sales matched this card closely enough to produce a value estimate.'
+      );
+    }
+
     const comparableSales = sales
       .filter((sale) => Number.isFinite(Number(sale?.price)))
-      .filter((sale) => {
-        if (!sale?.title && !sale?.player && !sale?.card_set) return false;
-        return true;
-      })
-      .map((sale) => ({
-        ...sale,
-        price: Number(sale.price),
-        score: 0,
-      }))
+      .filter((sale) => !!(sale?.title || sale?.player || sale?.card_set || sale?.set_name))
+      .map((sale) => ({ ...sale, price: Number(sale.price), score: 0 }))
       .slice(0, 10);
 
     if (!comparableSales.length) {
       return buildUnavailableResponse(
-        'insufficient_data',
-        'No recent marketplace sales matched this card closely enough to produce a value estimate.'
+        'no_match',
+        'No matching card found for the provided card details.'
       );
     }
 

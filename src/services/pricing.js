@@ -2,6 +2,16 @@ const PRICE_CACHE = new Map();
 const PRICE_TTL_MS = 5 * 60 * 1000;
 const PRICE_ENDPOINT = '/.netlify/functions/price';
 
+export const PRICE_STATUS = Object.freeze({
+  loading: 'loading',
+  available: 'available',
+  insufficient_data: 'insufficient_data',
+  no_match: 'no_match',
+  not_configured: 'not_configured',
+  rate_limited: 'rate_limited',
+  provider_error: 'provider_error',
+});
+
 function normalizeText(value = '') {
   return String(value ?? '')
     .replace(/[^a-z0-9]+/gi, ' ')
@@ -116,13 +126,86 @@ export function filterComparableSales(card, sales = []) {
     .slice(0, 10);
 }
 
+export function getPriceStatusMeta(result = {}) {
+  const status = result?.status || 'unavailable';
+  const reason = result?.reason || '';
+
+  switch (status) {
+    case 'available':
+      return {
+        label: 'Market value',
+        summary: 'Estimated market value',
+        statusLabel: 'Available',
+      };
+    case 'not_configured':
+      return {
+        label: 'Pricing API not configured',
+        summary: 'Add the server-side API key to Netlify before publishing.',
+        statusLabel: 'Not configured',
+      };
+    case 'rate_limited':
+      return {
+        label: 'Market data temporarily unavailable',
+        summary: 'The pricing provider rate-limited this lookup.',
+        statusLabel: 'Rate limited',
+      };
+    case 'no_match':
+      return {
+        label: 'No matching card found',
+        summary: 'The card details did not match a recent sale closely enough.',
+        statusLabel: 'No match',
+      };
+    case 'insufficient_data':
+      return {
+        label: 'No recent comparable sales',
+        summary: 'This card does not have enough recent sales data to estimate a market value.',
+        statusLabel: 'Insufficient data',
+      };
+    case 'provider_error':
+      return {
+        label: 'Pricing provider error',
+        summary: 'The market data provider rejected or failed this request.',
+        statusLabel: reason === 'invalid_key' ? 'Authentication error' : 'Provider error',
+      };
+    case 'loading':
+      return {
+        label: 'Checking market data…',
+        summary: 'Fetching the latest comparable sales.',
+        statusLabel: 'Loading',
+      };
+    default:
+      return {
+        label: 'Price unavailable',
+        summary: result?.message || 'Price unavailable',
+        statusLabel: 'Unavailable',
+      };
+  }
+}
+
 export function buildPriceResult(card = {}, sales = [], meta = {}) {
   const comparableSales = filterComparableSales(card, sales);
+
+  if (!Array.isArray(sales) || sales.length === 0) {
+    return {
+      status: 'insufficient_data',
+      reason: 'insufficient_data',
+      message: 'No recent comparable sales were reported for this card.',
+      source: 'The Card API',
+      sourceUrl: 'https://www.thecardapi.com',
+      lastFetchedAt: new Date().toISOString(),
+      currency: 'USD',
+      coverage: meta.coverage_date_from && meta.coverage_date_to ? `${meta.coverage_date_from} to ${meta.coverage_date_to}` : 'Recent completed sales',
+      confidence: 'low',
+      sampleSize: 0,
+      comparableSales: [],
+    };
+  }
+
   if (!comparableSales.length) {
     return {
-      status: 'unavailable',
-      reason: 'insufficient_data',
-      message: 'No sufficiently comparable sales were found for this card.',
+      status: 'no_match',
+      reason: 'no_match',
+      message: 'No matching card found. The current card details do not match enough recent sales.',
       source: 'The Card API',
       sourceUrl: 'https://www.thecardapi.com',
       lastFetchedAt: new Date().toISOString(),
@@ -219,22 +302,42 @@ export async function fetchCardPrice(card, options = {}) {
       signal: options.signal,
     });
 
-    const payload = await response.json();
-    if (!response.ok || payload?.status === 'unavailable' || payload?.error) {
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || payload?.error) {
       const result = payload && typeof payload === 'object' ? payload : {
-        status: 'unavailable',
-        reason: 'upstream_error',
-        message: 'Price service did not return usable data.',
+        status: 'provider_error',
+        reason: 'provider_error',
+        message: 'The pricing service failed to respond.',
       };
       PRICE_CACHE.set(key, { fetchedAt: Date.now(), result });
       return result;
     }
 
-    PRICE_CACHE.set(key, { fetchedAt: Date.now(), result: payload });
-    return payload;
+    const isStatusObject = payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'status');
+    if (isStatusObject && payload.status !== 'available') {
+      PRICE_CACHE.set(key, { fetchedAt: Date.now(), result: payload });
+      return payload;
+    }
+
+    if (payload && typeof payload === 'object') {
+      PRICE_CACHE.set(key, { fetchedAt: Date.now(), result: payload });
+      return payload;
+    }
+
+    const result = {
+      status: 'provider_error',
+      reason: 'provider_error',
+      message: 'Price service did not return usable data.',
+      source: 'The Card API',
+      currency: 'USD',
+      lastFetchedAt: new Date().toISOString(),
+      comparableSales: [],
+    };
+    PRICE_CACHE.set(key, { fetchedAt: Date.now(), result });
+    return result;
   } catch (error) {
     const result = {
-      status: 'unavailable',
+      status: 'provider_error',
       reason: 'request_failed',
       message: error?.message || 'Price lookup failed.',
       source: 'The Card API',

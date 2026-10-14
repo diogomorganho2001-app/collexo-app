@@ -53,6 +53,8 @@ service cloud.firestore {
           'tradeHistory',
           'milestonesSeen',
           'completionPct',
+          'lists',
+          'portfolioHistory',
           'createdAt',
           'updatedAt'
         ])
@@ -61,6 +63,8 @@ service cloud.firestore {
         && request.resource.data.stickers is list
         && request.resource.data.tradeHistory is list
         && request.resource.data.milestonesSeen is map
+        && request.resource.data.lists is list
+        && request.resource.data.portfolioHistory is list
         && request.resource.data.completionPct is int
         && request.resource.data.completionPct >= 0
         && request.resource.data.completionPct <= 100

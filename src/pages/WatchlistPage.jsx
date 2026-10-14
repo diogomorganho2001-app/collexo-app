@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { fetchCardPrice, formatPriceAmount } from '../services/pricing.js';
+import { fetchCardPrice, formatPriceAmount, getPriceStatusMeta } from '../services/pricing.js';
 
-export default function WatchlistPage({ stickers }) {
+export default function WatchlistPage({ stickers, lists = [], onAddCardToList, onCreateList }) {
   const watchlist = (stickers || []).filter((card) => card.wanted);
   const [prices, setPrices] = useState({});
 
@@ -14,12 +14,12 @@ export default function WatchlistPage({ stickers }) {
     let active = true;
     async function loadPrices() {
       const next = {};
-      for (const card of watchlist) {
+      await Promise.all(watchlist.map(async (card) => {
         const result = await fetchCardPrice(card);
         if (active) {
           next[card.code || `${card.name}-${card.team}`] = result;
         }
-      }
+      }));
       if (active) {
         setPrices(next);
       }
@@ -29,7 +29,17 @@ export default function WatchlistPage({ stickers }) {
     return () => {
       active = false;
     };
-  }, [stickers]);
+  }, [watchlist]);
+
+  const openListPicker = (card) => {
+    const name = window.prompt('Name your new list', 'Cards to buy');
+    if (name && typeof onCreateList === 'function') {
+      const list = onCreateList(name, '');
+      if (list && typeof onAddCardToList === 'function') {
+        onAddCardToList(list.id, card.code);
+      }
+    }
+  };
 
   return (
     <div className="page-shell">
@@ -52,6 +62,7 @@ export default function WatchlistPage({ stickers }) {
             const key = card.code || `${card.name}-${card.team}`;
             const priceResult = prices[key];
             const hasEstimate = priceResult?.status === 'available' && Number.isFinite(Number(priceResult.estimate));
+            const statusMeta = getPriceStatusMeta(priceResult);
 
             return (
               <div className="list-row" key={key}>
@@ -63,9 +74,12 @@ export default function WatchlistPage({ stickers }) {
                   <span className="muted">
                     {priceResult?.lastFetchedAt ? `Last updated: ${new Date(priceResult.lastFetchedAt).toLocaleDateString()}` : 'Checking market data…'}
                   </span>
-                  <strong>
-                    {hasEstimate ? formatPriceAmount(priceResult.estimate, priceResult.currency) : 'Price unavailable'}
-                  </strong>
+                  <div className="market-row-actions">
+                    <strong>{hasEstimate ? formatPriceAmount(priceResult.estimate, priceResult.currency) : statusMeta.label}</strong>
+                    <button type="button" className="secondary-button small-button" onClick={() => openListPicker(card)}>
+                      Add to list
+                    </button>
+                  </div>
                 </div>
               </div>
             );

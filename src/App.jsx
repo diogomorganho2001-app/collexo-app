@@ -10,6 +10,8 @@ import CollectionDashboard from './pages/CollectionDashboard.jsx';
 import ExploreCollectionsPage from './pages/ExploreCollectionsPage.jsx';
 import MarketPage from './pages/MarketPage.jsx';
 import WatchlistPage from './pages/WatchlistPage.jsx';
+import PortfolioPage from './pages/PortfolioPage.jsx';
+import ListsPage from './pages/ListsPage.jsx';
 import ProfilePage from './pages/ProfilePage.jsx';
 import TradePage from './pages/TradePage.jsx';
 import CompactStats from './components/CompactStats.jsx';
@@ -17,20 +19,28 @@ import MilestoneToast from './components/MilestoneToast.jsx';
 import { ensurePublicProfile } from './services/profiles.js';
 
 const AUTH_ROUTES = new Set(['signin', 'register']);
-const APP_ROUTES = new Set(['collection', 'explore', 'market', 'watchlist', 'trades', 'profile']);
+const APP_ROUTES = new Set(['collection', 'explore', 'market', 'portfolio', 'watchlist', 'lists', 'trades', 'profile']);
 
 function getCurrentHashRoute() {
-  if (typeof window === 'undefined') return { route: 'collection', collectionId: null };
+  if (typeof window === 'undefined') return { route: 'collection', collectionId: null, listId: null };
   const hash = window.location.hash.replace(/^#/, '').trim();
-  if (!hash) return { route: 'collection', collectionId: null };
-  if (hash === 'explore') return { route: 'explore', collectionId: null };
+  if (!hash) return { route: 'collection', collectionId: null, listId: null };
+  if (hash === 'explore') return { route: 'explore', collectionId: null, listId: null };
   if (hash.startsWith('explore/')) {
     return {
       route: 'explore',
       collectionId: decodeURIComponent(hash.replace(/^explore\//, '')),
+      listId: null,
     };
   }
-  return { route: hash, collectionId: null };
+  if (hash.startsWith('lists/')) {
+    return {
+      route: 'lists',
+      collectionId: null,
+      listId: decodeURIComponent(hash.replace(/^lists\//, '')),
+    };
+  }
+  return { route: hash, collectionId: null, listId: null };
 }
 
 export default function App() {
@@ -38,6 +48,7 @@ export default function App() {
   const initialRoute = getCurrentHashRoute();
   const [route, setRoute] = useState(initialRoute.route);
   const [selectedCollectionId, setSelectedCollectionId] = useState(initialRoute.collectionId);
+  const [selectedListId, setSelectedListId] = useState(initialRoute.listId);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [lightMode, setLightMode] = useState(false);
   const [toasts, setToasts] = useState([]);
@@ -47,8 +58,9 @@ export default function App() {
     stickers, setStickers,
     tradeHistory, setTradeHistory,
     milestonesSeen, setMilestonesSeen,
+    lists, setLists,
     loadData, persistData, ready,
-    stickersRef, tradeHistoryRef, milestoneSeenRef,
+    stickersRef, tradeHistoryRef, milestoneSeenRef, listsRef,
   } = useCollection(user);
 
   useEffect(() => {
@@ -56,6 +68,7 @@ export default function App() {
       const next = getCurrentHashRoute();
       setRoute(next.route);
       setSelectedCollectionId(next.collectionId || null);
+      setSelectedListId(next.listId || null);
     };
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
@@ -210,6 +223,7 @@ export default function App() {
 
   const handleSelectCollection = useCallback((collectionId) => {
     setSelectedCollectionId(collectionId);
+    setSelectedListId(null);
     setRoute('explore');
     window.location.hash = `#explore/${encodeURIComponent(collectionId)}`;
   }, []);
@@ -219,6 +233,78 @@ export default function App() {
     setRoute('explore');
     window.location.hash = '#explore';
   }, []);
+
+  const handleCreateList = useCallback((name, description = '') => {
+    const trimmed = String(name || '').trim();
+    if (!trimmed) return null;
+    const nextList = {
+      id: `list-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+      name: trimmed,
+      description: String(description || '').trim(),
+      cardCodes: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      ownerId: user.uid,
+    };
+    const next = [...listsRef.current, nextList];
+    setLists(next);
+    listsRef.current = next;
+    persistData();
+    return nextList;
+  }, [persistData, user]);
+
+  const handleAddCardToList = useCallback((listId, cardCode) => {
+    if (!listId || !cardCode) return false;
+    const next = listsRef.current.map((list) => {
+      if (list.id !== listId) return list;
+      const existing = list.cardCodes || [];
+      if (existing.includes(cardCode)) return list;
+      return {
+        ...list,
+        cardCodes: [...existing, cardCode],
+        updatedAt: new Date().toISOString(),
+      };
+    });
+    setLists(next);
+    listsRef.current = next;
+    persistData();
+    return true;
+  }, [persistData]);
+
+  const handleRemoveCardFromList = useCallback((listId, cardCode) => {
+    const next = listsRef.current.map((list) => list.id !== listId ? list : {
+      ...list,
+      cardCodes: (list.cardCodes || []).filter((code) => code !== cardCode),
+      updatedAt: new Date().toISOString(),
+    });
+    setLists(next);
+    listsRef.current = next;
+    persistData();
+  }, [persistData]);
+
+  const handleRenameList = useCallback((listId, name) => {
+    const trimmed = String(name || '').trim();
+    if (!trimmed) return;
+    const next = listsRef.current.map((list) => list.id !== listId ? list : {
+      ...list,
+      name: trimmed,
+      updatedAt: new Date().toISOString(),
+    });
+    setLists(next);
+    listsRef.current = next;
+    persistData();
+  }, [persistData]);
+
+  const handleDeleteList = useCallback((listId) => {
+    const next = listsRef.current.filter((list) => list.id !== listId);
+    setLists(next);
+    listsRef.current = next;
+    if (selectedListId === listId) {
+      setSelectedListId(null);
+      window.location.hash = '#lists';
+    }
+    persistData();
+  }, [persistData, selectedListId]);
 
   const handleSyncToCloud = useCallback(async () => {
     try {
@@ -256,8 +342,10 @@ export default function App() {
   const navItems = [
     { id: 'collection', label: 'My Collection' },
     { id: 'explore', label: 'Explore Collections' },
-    { id: 'market', label: 'Market' },
+    { id: 'market', label: 'My Market' },
+    { id: 'portfolio', label: 'Portfolio' },
     { id: 'watchlist', label: 'My Watchlist' },
+    { id: 'lists', label: 'My Lists' },
     { id: 'trades', label: 'Trades' },
     { id: 'profile', label: 'Profile & Settings' },
   ];
@@ -268,16 +356,42 @@ export default function App() {
         return (
           <ExploreCollectionsPage
             stickers={stickers}
+            lists={lists}
             onToggleOwned={handleToggleOwned}
+            onAddCardToList={handleAddCardToList}
+            onCreateList={handleCreateList}
             selectedCollectionId={selectedCollectionId}
             onSelectCollection={handleSelectCollection}
             onBackToCollections={handleBackToCollections}
           />
         );
       case 'market':
-        return <MarketPage stickers={stickers} />;
+        return <MarketPage stickers={stickers} lists={lists} onAddCardToList={handleAddCardToList} onCreateList={handleCreateList} />;
+      case 'portfolio':
+        return <PortfolioPage stickers={stickers} />;
       case 'watchlist':
-        return <WatchlistPage stickers={stickers} />;
+        return <WatchlistPage stickers={stickers} lists={lists} onAddCardToList={handleAddCardToList} onCreateList={handleCreateList} />;
+      case 'lists':
+        return (
+          <ListsPage
+            stickers={stickers}
+            lists={lists}
+            selectedListId={selectedListId}
+            onCreateList={handleCreateList}
+            onRenameList={handleRenameList}
+            onDeleteList={handleDeleteList}
+            onAddCardToList={handleAddCardToList}
+            onRemoveCardFromList={handleRemoveCardFromList}
+            onSelectList={(id) => {
+              setSelectedListId(id);
+              window.location.hash = `#lists/${encodeURIComponent(id)}`;
+            }}
+            onBack={() => {
+              setSelectedListId(null);
+              window.location.hash = '#lists';
+            }}
+          />
+        );
       case 'trades':
         return (
           <TradePage
@@ -315,8 +429,11 @@ export default function App() {
   const openRoute = (target) => {
     setRoute(target);
     setSelectedCollectionId(null);
+    setSelectedListId(null);
     setMobileNavOpen(false);
-    window.location.hash = target === 'explore' ? '#explore' : `#${target}`;
+    if (target === 'explore') window.location.hash = '#explore';
+    else if (target === 'lists') window.location.hash = '#lists';
+    else window.location.hash = `#${target}`;
   };
 
   return (
